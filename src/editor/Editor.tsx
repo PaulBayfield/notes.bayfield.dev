@@ -7,9 +7,9 @@ import { gapCursor } from "prosemirror-gapcursor";
 import { tableEditing } from "prosemirror-tables";
 import { mathPlugin } from "@benrbray/prosemirror-math";
 import { ySyncPlugin, yCursorPlugin, yUndoPlugin } from "y-prosemirror";
-import { docIdFromHref, uploadAttachment, webUrl, type User } from "../lib/api";
+import { docIdFromHref, uploadAttachment, uploadAttachmentFromPath, webUrl, type Attachment, type User } from "../lib/api";
 import type { Translate } from "../lib/i18n";
-import { openExternal } from "../lib/platform";
+import { isTauri, openExternal, pickFiles } from "../lib/platform";
 import { connect, presence, unknownTypes, type CollabStatus, type PresenceUser } from "./collab";
 import { BubbleMenu, LINK_EVENT, SuggestMenu } from "./menus";
 import { nodeViews } from "./nodeviews";
@@ -84,6 +84,9 @@ function headingsOf(state: EditorState): Heading[] {
   return out;
 }
 
+/** A file to attach: pasted or dropped (a File), or picked on desktop (a path). */
+type Upload = () => Promise<Attachment>;
+
 /** Positions kept up to date through every transaction (local or remote), for async inserts. */
 interface Tracked {
   pos: number;
@@ -98,8 +101,7 @@ export function Editor(props: Props) {
   const propsRef = useRef(props);
   propsRef.current = props;
   const fileInput = useRef<HTMLInputElement>(null);
-  const pickImages = useRef(true);
-  const uploadRef = useRef<(files: File[]) => void>(() => {});
+  const uploadRef = useRef<(files: Upload[]) => void>(() => {});
 
   useEffect(() => {
     let destroyed = false;
@@ -127,18 +129,19 @@ export function Editor(props: Props) {
       else if (!href.startsWith("#")) void openExternal(href);
     };
 
-    const upload = (files: File[], at: number) => {
+    const fromFiles = (files: File[]): Upload[] => files.map((file) => () => uploadAttachment(docId, file));
+    const upload = (files: Upload[], at: number) => {
       const spot: Tracked = { pos: at };
       tracked.add(spot);
       void (async () => {
-        for (const file of files) {
+        for (const send of files) {
           try {
-            const att = await uploadAttachment(docId, file);
+            const att = await send();
             const v = editorView;
             if (!v || destroyed) return;
-            const node = file.type.startsWith("image/")
+            const node = att.contentType.startsWith("image/")
               ? schema.nodes.image.create({ src: att.url, alt: null })
-              : schema.nodes.attachment.create({ id: att.id, href: att.url, title: att.name, size: att.size, contentType: file.type || null });
+              : schema.nodes.attachment.create({ id: att.id, href: att.url, title: att.name, size: att.size, contentType: att.contentType || null });
             const tr = v.state.tr.insert(Math.min(spot.pos, v.state.doc.content.size), node);
             v.dispatch(tr);
             spot.pos = tr.mapping.map(spot.pos);
@@ -230,7 +233,7 @@ export function Editor(props: Props) {
           if (!v.editable) return false;
           const files = [...(event.clipboardData?.files ?? [])];
           if (files.length) {
-            upload(files, v.state.selection.from);
+            upload(fromFiles(files), v.state.selection.from);
             return true;
           }
           const text = event.clipboardData?.getData("text/plain") ?? "";
@@ -258,7 +261,7 @@ export function Editor(props: Props) {
           const files = [...((event as DragEvent).dataTransfer?.files ?? [])];
           if (!files.length || !v.editable) return false;
           const at = v.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY })?.pos ?? v.state.selection.from;
-          upload(files, at);
+          upload(fromFiles(files), at);
           return true;
         },
       });
@@ -326,8 +329,12 @@ export function Editor(props: Props) {
             t={props.t}
             self={props.user}
             pickFile={(images) => {
-              pickImages.current = images;
-              if (fileInput.current) {
+              if (isTauri) {
+                // The system dialog: the webview's own picker can open out of sight on desktop.
+                pickFiles(images)
+                  .then((paths) => uploadRef.current(paths.map((path) => () => uploadAttachmentFromPath(docId, path))))
+                  .catch(props.onError);
+              } else if (fileInput.current) {
                 fileInput.current.accept = images ? "image/*" : "";
                 fileInput.current.click();
               }
@@ -357,7 +364,7 @@ export function Editor(props: Props) {
         onChange={(e) => {
           const files = [...(e.target.files ?? [])];
           e.target.value = "";
-          if (files.length) uploadRef.current(files);
+          if (files.length) uploadRef.current(files.map((file) => () => uploadAttachment(docId, file)));
         }}
       />
     </>

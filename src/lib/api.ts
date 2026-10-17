@@ -133,6 +133,12 @@ export async function ensureCsrfCookie() {
   await fetch("/robots.txt", { credentials: "same-origin" }).catch(() => {});
 }
 
+/** Web only: the header Outline wants on cookie-authenticated writes. */
+function csrfHeader(): Record<string, string> {
+  const csrf = readCookie("__Host-csrfToken") ?? readCookie("csrfToken");
+  return csrf ? { "x-csrf-token": decodeURIComponent(csrf) } : {};
+}
+
 export async function call<T>(method: string, body: object = {}): Promise<Envelope<T>> {
   if (isDemo) {
     try {
@@ -146,10 +152,7 @@ export async function call<T>(method: string, body: object = {}): Promise<Envelo
     accept: "application/json",
     "x-editor-version": EDITOR_VERSION,
   };
-  if (!isTauri) {
-    const csrf = readCookie("__Host-csrfToken") ?? readCookie("csrfToken");
-    if (csrf) headers["x-csrf-token"] = decodeURIComponent(csrf);
-  }
+  if (!isTauri) Object.assign(headers, csrfHeader());
   let res: Response;
   try {
     res = await fetch(`${apiBase}/api/${method}`, {
@@ -235,36 +238,60 @@ export const duplicateDocument = (id: string) => call<{ documents: Doc[] }>("doc
 export const listUsers = (query: string, limit = 8) =>
   call<User[]>("users.list", { query, limit, filter: "active" }).then((r) => r.data);
 
+export interface Attachment {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+  contentType: string;
+}
+
 /** Uploads a file as an attachment of a document; returns the URL to put in the document. */
-export async function uploadAttachment(documentId: string, file: File): Promise<{ url: string; id: string; name: string; size: number }> {
+export async function uploadAttachment(documentId: string, file: File): Promise<Attachment> {
+  const contentType = file.type || "application/octet-stream";
+  if (isTauri) {
+    // The desktop app uploads from Rust: WebView2 drops file bodies sent to the notes:// proxy.
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<Attachment>("upload_bytes", new Uint8Array(await file.arrayBuffer()), {
+      headers: { "x-document-id": documentId, "x-file-name": encodeURIComponent(file.name || "file"), "x-content-type": file.type },
+    });
+  }
   const res = await call<{
-    mode?: "post" | "put";
-    uploadUrl?: string;
-    url?: string;
+    uploadUrl: string;
     form?: Record<string, string>;
-    headers?: Record<string, string>;
     attachment: { id: string; url: string; name: string; size: number };
   }>("attachments.create", {
     documentId,
     name: file.name || "file",
-    contentType: file.type || "application/octet-stream",
+    contentType,
     size: file.size,
     preset: "documentAttachment",
   });
   const data = res.data;
-  if (data.mode === "put" && data.url) {
-    const put = await fetch(data.url, { method: "PUT", headers: data.headers, body: file });
-    if (!put.ok) throw new ApiError("Upload failed", put.status);
-  } else {
-    const form = new FormData();
-    for (const [k, v] of Object.entries(data.form ?? {})) form.append(k, v);
-    form.append("file", file);
-    // Local storage uploads to /api/files.create (proxied with the session); S3 to its own URL.
-    const target = data.uploadUrl?.startsWith("/") ? `${apiBase}${data.uploadUrl}` : data.uploadUrl!;
-    const post = await fetch(target, { method: "POST", body: form, credentials: "same-origin" });
-    if (!post.ok) throw new ApiError("Upload failed", post.status);
+  const form = new FormData();
+  for (const [k, v] of Object.entries(data.form ?? {})) form.append(k, v);
+  form.append("file", file);
+  // Local storage uploads to /api/files.create with the session (and its CSRF token); S3 to its own URL.
+  const local = data.uploadUrl.startsWith("/");
+  const post = await fetch(data.uploadUrl, {
+    method: "POST",
+    body: form,
+    headers: local ? csrfHeader() : undefined,
+    credentials: local ? "same-origin" : "omit",
+  }).catch(() => {
+    throw new ApiError("Couldn't reach the server. Check your connection.", 0);
+  });
+  if (!post.ok) {
+    const json = await post.json().catch(() => null);
+    throw new ApiError(json?.message || `Upload failed (${post.status})`, post.status);
   }
-  return data.attachment;
+  return { ...data.attachment, contentType };
+}
+
+/** Desktop: uploads a file picked with `pickFiles`, by path. */
+export async function uploadAttachmentFromPath(documentId: string, path: string): Promise<Attachment> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<Attachment>("upload_file", { documentId, path });
 }
 
 // ---------- URLs ----------
