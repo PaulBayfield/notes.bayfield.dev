@@ -570,6 +570,22 @@ export const addDocumentGroup = (id: string, groupId: string, permission: Docume
 
 export const removeDocumentGroup = (id: string, groupId: string) => call("documents.remove_group", { id, groupId });
 
+/**
+ * Pages shared with me, directly or through one of my groups (Outline's "Shared with me"),
+ * in the order Outline keeps them.
+ */
+export async function listSharedWithMe(): Promise<Doc[]> {
+  const [mine, viaGroups] = await Promise.all([
+    call<{ memberships: Membership[]; documents: Doc[] }>("userMemberships.list", { limit: 100 }).then((r) => r.data),
+    call<{ groupMemberships: GroupMembership[]; documents: Doc[] }>("groupMemberships.list", { limit: 100 })
+      .then((r) => r.data)
+      .catch(() => ({ groupMemberships: [] as GroupMembership[], documents: [] as Doc[] })),
+  ]);
+  const ordered = [...mine.memberships.map((m) => m.documentId), ...viaGroups.groupMemberships.map((m) => m.documentId)];
+  const docs = new Map([...viaGroups.documents, ...mine.documents].map((d) => [d.id, d]));
+  return [...new Set(ordered)].flatMap((id) => docs.get(id) ?? []);
+}
+
 export interface Share {
   id: string;
   documentId: string | null;

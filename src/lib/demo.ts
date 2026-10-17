@@ -137,6 +137,10 @@ export async function demoCall(method: string, body: Record<string, unknown>): P
     }
     case "documents.users":
       return { data: [me, friend, guest].filter((u) => u.id !== guest.id || members.some((m) => m.userId === u.id)) };
+    case "userMemberships.list":
+      return { data: { memberships: [{ id: "um1", userId: me.id, documentId: "d2", permission: "read" }], documents: [find("d2")] } };
+    case "groupMemberships.list":
+      return { data: { groupMemberships: [], groups: [], documents: [] } };
     case "groups.list":
       return { data: { groups: groups.filter((g) => g.name.toLowerCase().includes(String(body.query ?? "").toLowerCase())), groupMemberships: [] } };
     case "documents.group_memberships":

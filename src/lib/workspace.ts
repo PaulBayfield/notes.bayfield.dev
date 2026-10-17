@@ -2,7 +2,7 @@
 // slow refresh as a safety net.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collectionTree, listCollections, listStars, type Collection, type Doc, type NavNode, type Star } from "./api";
+import { collectionTree, listCollections, listSharedWithMe, listStars, type Collection, type Doc, type NavNode, type Star } from "./api";
 import { collectionIdsOf, onRealtime } from "./realtime";
 
 const REFRESH_MS = 10 * 60 * 1000;
@@ -19,18 +19,20 @@ export function useWorkspace(onError: (e: unknown) => void) {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [trees, setTrees] = useState<Record<string, NavNode[]>>({});
   const [stars, setStars] = useState<{ stars: Star[]; documents: Doc[] }>({ stars: [], documents: [] });
+  const [shared, setShared] = useState<Doc[]>([]);
   const [loaded, setLoaded] = useState(false);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
   const refresh = useCallback(async () => {
     try {
-      const [cols, starred] = await Promise.all([listCollections(), listStars()]);
+      const [cols, starred, sharedDocs] = await Promise.all([listCollections(), listStars(), listSharedWithMe().catch(() => [] as Doc[])]);
       cols.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
       const treeList = await Promise.all(cols.map((c) => collectionTree(c.id).catch(() => [] as NavNode[])));
       setCollections(cols);
       setTrees(Object.fromEntries(cols.map((c, i) => [c.id, treeList[i]])));
       setStars(starred);
+      setShared(sharedDocs);
       setLoaded(true);
     } catch (e) {
       onErrorRef.current(e);
@@ -48,7 +50,9 @@ export function useWorkspace(onError: (e: unknown) => void) {
 
   const refreshStars = useCallback(async () => {
     try {
-      setStars(await listStars());
+      const [starred, sharedDocs] = await Promise.all([listStars(), listSharedWithMe().catch(() => null)]);
+      setStars(starred);
+      if (sharedDocs) setShared(sharedDocs);
     } catch (e) {
       onErrorRef.current(e);
     }
@@ -98,7 +102,7 @@ export function useWorkspace(onError: (e: unknown) => void) {
         const ids = collectionIdsOf(data);
         if (ids.length) ids.forEach((id) => collectionsDirty.add(id));
         else if (event !== "entities") all = true;
-        // Titles and icons of starred documents live in the stars list.
+        // Titles and icons of starred and shared documents live in their own lists.
         stars = true;
         schedule();
       }
@@ -110,6 +114,7 @@ export function useWorkspace(onError: (e: unknown) => void) {
     const rename = (nodes: NavNode[]): NavNode[] => nodes.map((n) => (n.id === id ? { ...n, title } : n.children.length ? { ...n, children: rename(n.children) } : n));
     setTrees((t) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, rename(v)])));
     setStars((s) => ({ ...s, documents: s.documents.map((d) => (d.id === id ? { ...d, title } : d)) }));
+    setShared((list) => list.map((d) => (d.id === id ? { ...d, title } : d)));
   }, []);
 
   const index = useMemo(() => {
@@ -129,7 +134,7 @@ export function useWorkspace(onError: (e: unknown) => void) {
     return map;
   }, [collections, trees]);
 
-  return { collections, trees, stars, loaded, refresh, refreshCollection, refreshStars, renameLocal, locate: (id: string) => index.get(id) };
+  return { collections, trees, stars, shared, loaded, refresh, refreshCollection, refreshStars, renameLocal, locate: (id: string) => index.get(id) };
 }
 
 export type Workspace = ReturnType<typeof useWorkspace>;

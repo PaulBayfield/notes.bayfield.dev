@@ -37,6 +37,8 @@ interface DragState {
 
 interface Props {
   workspace: Workspace;
+  /** The signed-in user. */
+  meId: string;
   route: Route;
   /** Canonical id of the open document, once loaded. */
   activeDocId?: string;
@@ -129,6 +131,8 @@ export function Sidebar(p: Props) {
       return collection ? [{ kind: "collection", star, collection }] : [];
     });
 
+  const shared = workspace.shared.filter((d) => d.createdBy?.id !== p.meId);
+
   return (
     <aside className="sidebar">
       <div className="sidebar-top" data-tauri-drag-region>
@@ -150,6 +154,30 @@ export function Sidebar(p: Props) {
         </button>
       </nav>
       <div className="sidebar-scroll">
+        {shared.length > 0 && (
+          <section className="tree-group">
+            <button className="tree-group-title" onClick={() => toggleFold("shared")}>
+              <span>{t("sharedWithMe")}</span>
+              <span className={`fold-chevron${folded.has("shared") ? "" : " open"}`}>
+                <ChevronRight size={12} />
+              </span>
+            </button>
+            {!folded.has("shared") &&
+              shared.map((doc) => (
+                <button
+                  key={doc.id}
+                  className={`tree-row${isActive(doc.id) ? " active" : ""}`}
+                  style={{ "--depth": 0 } as CSSProperties}
+                  onClick={() => p.onNavigate({ name: "doc", id: doc.id })}
+                  onContextMenu={(e) => doc.collectionId && p.onContextMenu({ id: doc.id, title: doc.title, url: doc.url, collectionId: doc.collectionId }, e)}
+                >
+                  <span className="tree-chevron-space" />
+                  <DocIcon icon={doc.icon} color={doc.color} />
+                  <span className="tree-title">{doc.title || t("untitled")}</span>
+                </button>
+              ))}
+          </section>
+        )}
         {starred.length > 0 && (
           <section className="tree-group">
             <button className="tree-group-title" onClick={() => toggleFold("starred")}>

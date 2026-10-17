@@ -350,6 +350,7 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
       {(mobile ? drawerOpen : settings.sidebar) && (
         <Sidebar
           workspace={workspace}
+          meId={session.user.id}
           route={route}
           activeDocId={meta?.doc.id}
           onNavigate={go}
