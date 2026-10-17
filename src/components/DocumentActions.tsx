@@ -132,6 +132,13 @@ export function useDocumentActions(p: Params) {
   // ---------- Shared actions ----------
 
   const isStarred = (id: string) => workspace.stars.stars.find((s) => s.documentId === id);
+  const isCollectionStarred = (id: string) => workspace.stars.stars.find((s) => s.collectionId === id);
+  const toggleCollectionStar = (id: string) =>
+    run(async () => {
+      const existing = isCollectionStarred(id);
+      await (existing ? unstar(existing.id) : starCollection(id));
+      await workspace.refreshStars();
+    });
   const toggleStar = (id: string) =>
     run(async () => {
       const existing = isStarred(id);
@@ -333,7 +340,11 @@ export function useDocumentActions(p: Params) {
     menu([
       { label: t("newDoc"), icon: <FilePlus size={15} />, onClick: () => void p.newDoc(c.id) },
       { label: t("editCollection"), icon: <Pencil size={15} />, onClick: () => setDialog({ kind: "collection", collection: c }) },
-      { label: t("star"), icon: <Star size={15} />, onClick: run(async () => (await starCollection(c.id), workspace.refreshStars())) },
+      {
+        label: t(isCollectionStarred(c.id) ? "unstar" : "star"),
+        icon: <Star size={15} filled={!!isCollectionStarred(c.id)} />,
+        onClick: toggleCollectionStar(c.id),
+      },
       { kind: "separator" },
       { label: t("copyLink"), icon: <LinkIcon size={15} />, onClick: () => copyText(webUrl(`/collection/${c.urlId}`), t("linkCopied")) },
       { label: t("openInBrowser"), icon: <External size={15} />, onClick: () => void openExternal(webUrl(`/collection/${c.urlId}`)) },
@@ -461,5 +472,7 @@ export function useDocumentActions(p: Params) {
     },
     isStarred,
     toggleStar: (id: string) => toggleStar(id)(),
+    isCollectionStarred,
+    toggleCollectionStar: (id: string) => toggleCollectionStar(id)(),
   };
 }

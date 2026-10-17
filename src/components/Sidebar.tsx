@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import fractionalIndex from "fractional-index";
-import type { Collection, NavNode } from "../lib/api";
+import type { Collection, Doc, NavNode, Star as StarRecord } from "../lib/api";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
@@ -50,6 +50,8 @@ interface Props {
   onNewCollection: () => void;
   onCollectionMenu: (collection: Collection, e: MouseEvent) => void;
 }
+
+type StarredItem = { kind: "doc"; star: StarRecord; doc: Doc } | { kind: "collection"; star: StarRecord; collection: Collection };
 
 /** Top quarter: before, bottom quarter: after, middle: inside. */
 function zoneOf(e: DragEvent): "before" | "after" | "inside" {
@@ -116,6 +118,17 @@ export function Sidebar(p: Props) {
     },
   };
 
+  // Starred documents and collections, in the order they were starred (or rearranged in Outline).
+  const starred = workspace.stars.stars
+    .slice()
+    .sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0))
+    .flatMap((star): StarredItem[] => {
+      const doc = star.documentId && workspace.stars.documents.find((d) => d.id === star.documentId);
+      if (doc) return [{ kind: "doc", star, doc }];
+      const collection = star.collectionId && workspace.collections.find((c) => c.id === star.collectionId);
+      return collection ? [{ kind: "collection", star, collection }] : [];
+    });
+
   return (
     <aside className="sidebar">
       <div className="sidebar-top" data-tauri-drag-region>
@@ -137,7 +150,7 @@ export function Sidebar(p: Props) {
         </button>
       </nav>
       <div className="sidebar-scroll">
-        {workspace.stars.documents.length > 0 && (
+        {starred.length > 0 && (
           <section className="tree-group">
             <button className="tree-group-title" onClick={() => toggleFold("starred")}>
               <span>{t("starred")}</span>
@@ -146,24 +159,38 @@ export function Sidebar(p: Props) {
               </span>
             </button>
             {!folded.has("starred") &&
-              workspace.stars.stars
-                .slice()
-                .sort((a, b) => (a.index < b.index ? -1 : 1))
-                .map((s) => workspace.stars.documents.find((d) => d.id === s.documentId))
-                .filter((d) => !!d)
-                .map((d) => (
+              starred.map((s) =>
+                s.kind === "collection" ? (
                   <button
-                    key={d.id}
-                    className={`tree-row${isActive(d.id) ? " active" : ""}`}
-                    style={{ "--depth": 0 } as CSSProperties}
-                    onClick={() => p.onNavigate({ name: "doc", id: d.id })}
-                    onContextMenu={(e) => d.collectionId && p.onContextMenu({ id: d.id, title: d.title, url: d.url, collectionId: d.collectionId }, e)}
+                    key={s.star.id}
+                    className={`tree-row${p.route.name === "collection" && p.route.id === s.collection.id ? " active" : ""}`}
+                    style={{ "--depth": 0, "--c": s.collection.color ?? "var(--primary)" } as CSSProperties}
+                    onClick={() => p.onNavigate({ name: "collection", id: s.collection.id })}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      p.onCollectionMenu(s.collection, e);
+                    }}
                   >
                     <span className="tree-chevron-space" />
-                    <DocIcon icon={d.icon} color={d.color} starred />
-                    <span className="tree-title">{d.title || t("untitled")}</span>
+                    <span className="tree-icon">
+                      <EntityIcon icon={s.collection.icon} color={s.collection.color} size={18} fallback={<span className="collection-dot" />} />
+                    </span>
+                    <span className="tree-title">{s.collection.name}</span>
                   </button>
-                ))}
+                ) : (
+                  <button
+                    key={s.star.id}
+                    className={`tree-row${isActive(s.doc.id) ? " active" : ""}`}
+                    style={{ "--depth": 0 } as CSSProperties}
+                    onClick={() => p.onNavigate({ name: "doc", id: s.doc.id })}
+                    onContextMenu={(e) => s.doc.collectionId && p.onContextMenu({ id: s.doc.id, title: s.doc.title, url: s.doc.url, collectionId: s.doc.collectionId }, e)}
+                  >
+                    <span className="tree-chevron-space" />
+                    <DocIcon icon={s.doc.icon} color={s.doc.color} starred />
+                    <span className="tree-title">{s.doc.title || t("untitled")}</span>
+                  </button>
+                ),
+              )}
           </section>
         )}
         <section className="tree-group">

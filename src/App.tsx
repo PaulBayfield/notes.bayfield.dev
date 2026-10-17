@@ -319,6 +319,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
 
   // ---------- Layout ----------
 
+  const routeCollection = route.name === "collection" ? workspace.collections.find((x) => x.id === route.id || x.urlId === route.id) : undefined;
+
   const crumbs: Crumb[] = useMemo(() => {
     if (route.name === "home") return [{ label: t("home") }];
     if (route.name === "drafts") return [{ label: t("drafts") }];
@@ -372,8 +374,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           onForward={router.forward}
           status={route.name === "doc" ? docStatus : undefined}
           presence={presence}
-          starred={meta ? !!actions.isStarred(meta.doc.id) : undefined}
-          onToggleStar={meta ? () => actions.toggleStar(meta.doc.id) : undefined}
+          starred={meta ? !!actions.isStarred(meta.doc.id) : routeCollection ? !!actions.isCollectionStarred(routeCollection.id) : undefined}
+          onToggleStar={meta ? () => actions.toggleStar(meta.doc.id) : routeCollection ? () => actions.toggleCollectionStar(routeCollection.id) : undefined}
           docMenu={meta?.doc.collectionId ? <DropdownMenu title={t("more")} items={actions.docMenu()} /> : undefined}
           share={
             meta ? (
