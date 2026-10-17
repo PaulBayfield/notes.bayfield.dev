@@ -5,6 +5,9 @@ import { can, ApiError, documentInfo, updateDocument, type Doc, type User } from
 import { useSettings } from "../lib/settings";
 import { documentIdsOf, onRealtime } from "../lib/realtime";
 import { EntityIcon } from "./EntityIcon";
+import { Dialog } from "./Dialogs";
+import { COLORS, IconPicker } from "./IconPicker";
+import { Shapes, X } from "./icons";
 import { FindBar } from "./FindBar";
 import { embedsEnabled } from "../lib/docPrefs";
 import type { HeadingPrefixStyle } from "../editor/headingPrefix";
@@ -48,6 +51,7 @@ export function DocumentView(p: Props) {
   const [missing, setMissing] = useState(false);
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EditorStatus>("loading");
+  const [iconOpen, setIconOpen] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const editingTitle = useRef(false);
   const pRef = useRef(p);
@@ -138,6 +142,18 @@ export function DocumentView(p: Props) {
     view.focus();
   };
 
+  /** Applies an icon / colour change right away, then saves it. */
+  const setDocIcon = (patch: { icon: string | null; color: string }) => {
+    if (!meta) return;
+    const next = { ...meta, doc: { ...meta.doc, ...patch } };
+    setMeta(next);
+    p.onLoaded(next);
+    updateDocument(meta.doc.id, patch).catch((e) => {
+      p.onError(e);
+      void load();
+    });
+  };
+
   if (missing) return <div className="empty-state">{t("notFound")}</div>;
   if (!meta) return <div className="doc-scroll" />;
 
@@ -151,10 +167,35 @@ export function DocumentView(p: Props) {
     <div className="doc-scroll" id="doc-scroll">
       {p.findOpen && <FindBar viewRef={p.viewRef} editable={editable} onClose={p.onCloseFind} />}
       <article className={`doc${settings.fullWidth || doc.fullWidth ? " full-width" : ""} font-${settings.font}`} style={{ fontSize: settings.fontSize }}>
-        {doc.icon && (
+        {doc.icon && editable ? (
+          <button className="doc-icon editable" title={t("pageIcon")} onClick={() => setIconOpen(true)}>
+            <EntityIcon icon={doc.icon} color={doc.color} size={44} fallback={null} />
+          </button>
+        ) : doc.icon ? (
           <div className="doc-icon">
             <EntityIcon icon={doc.icon} color={doc.color} size={44} fallback={null} />
           </div>
+        ) : (
+          editable && (
+            <button className="doc-add-icon" onClick={() => setIconOpen(true)}>
+              <Shapes size={14} />
+              {t("addIcon")}
+            </button>
+          )
+        )}
+        {iconOpen && (
+          <Dialog title={t("pageIcon")} onClose={() => setIconOpen(false)}>
+            <div className="collection-form">
+              <IconPicker
+                icon={doc.icon}
+                color={doc.color ?? COLORS[0]}
+                noneLabel={t("noIcon")}
+                none={<X size={16} />}
+                onIcon={(icon) => setDocIcon({ icon, color: doc.color ?? COLORS[0] })}
+                onColor={(color) => setDocIcon({ icon: doc.icon, color })}
+              />
+            </div>
+          </Dialog>
         )}
         <textarea
           ref={titleRef}
