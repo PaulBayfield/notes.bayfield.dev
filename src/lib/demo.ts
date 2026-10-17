@@ -72,6 +72,11 @@ const pins: { id: string; documentId: string; collectionId: string | null; index
 const subscribed = new Set<string>();
 const guest: User = { id: "u3", name: "Marc", avatarUrl: null, color: "#56949f" };
 const members: { userId: string; permission: string }[] = [{ userId: "u1", permission: "admin" }];
+const groups = [
+  { id: "g1", name: "Friends", memberCount: 3 },
+  { id: "g2", name: "Family", memberCount: 5 },
+];
+const groupMembers: { groupId: string; permission: string }[] = [];
 let demoShare: Record<string, unknown> | null = null;
 const textData = (text: string) => ({ type: "doc", content: text.split(/\n/).map((line) => ({ type: "paragraph", content: line ? [{ type: "text", text: line }] : [] })) });
 
@@ -128,6 +133,28 @@ export async function demoCall(method: string, body: Record<string, unknown>): P
     case "documents.remove_user": {
       const i = members.findIndex((m) => m.userId === body.userId);
       if (i >= 0) members.splice(i, 1);
+      return { data: null };
+    }
+    case "documents.users":
+      return { data: [me, friend, guest].filter((u) => u.id !== guest.id || members.some((m) => m.userId === u.id)) };
+    case "groups.list":
+      return { data: { groups: groups.filter((g) => g.name.toLowerCase().includes(String(body.query ?? "").toLowerCase())), groupMemberships: [] } };
+    case "documents.group_memberships":
+      return {
+        data: {
+          groupMemberships: groupMembers.map((m) => ({ id: `gm${m.groupId}`, groupId: m.groupId, documentId: body.id, permission: m.permission })),
+          groups: groups.filter((g) => groupMembers.some((m) => m.groupId === g.id)),
+        },
+      };
+    case "documents.add_group": {
+      const existing = groupMembers.find((m) => m.groupId === body.groupId);
+      if (existing) existing.permission = String(body.permission);
+      else groupMembers.push({ groupId: String(body.groupId), permission: String(body.permission ?? "read_write") });
+      return { data: null };
+    }
+    case "documents.remove_group": {
+      const i = groupMembers.findIndex((m) => m.groupId === body.groupId);
+      if (i >= 0) groupMembers.splice(i, 1);
       return { data: null };
     }
     case "shares.info":

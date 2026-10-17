@@ -537,10 +537,38 @@ export interface Membership {
 export const documentMemberships = (id: string) =>
   call<{ memberships: Membership[]; users: User[] }>("documents.memberships", { id, limit: 100 }).then((r) => r.data);
 
+/** Everyone who can open a document: its own members plus the collection's. */
+export const documentUsers = (id: string) => call<User[]>("documents.users", { id, limit: 100 }).then((r) => r.data);
+
 /** Adds someone to a document, or changes their permission. */
 export const addDocumentUser = (id: string, userId: string, permission: DocumentPermission) => call("documents.add_user", { id, userId, permission });
 
 export const removeDocumentUser = (id: string, userId: string) => call("documents.remove_user", { id, userId });
+
+export interface Group {
+  id: string;
+  name: string;
+  memberCount: number;
+}
+
+export interface GroupMembership {
+  id: string;
+  groupId: string;
+  documentId: string;
+  permission: DocumentPermission;
+}
+
+export const listGroups = (query: string, limit = 8) =>
+  call<{ groups: Group[] }>("groups.list", { query, limit }).then((r) => r.data.groups);
+
+/** Groups explicitly added to a document. */
+export const documentGroupMemberships = (id: string) =>
+  call<{ groupMemberships: GroupMembership[]; groups: Group[] }>("documents.group_memberships", { id, limit: 100 }).then((r) => r.data);
+
+/** Adds a group to a document, or changes its permission. */
+export const addDocumentGroup = (id: string, groupId: string, permission: DocumentPermission) => call("documents.add_group", { id, groupId, permission });
+
+export const removeDocumentGroup = (id: string, groupId: string) => call("documents.remove_group", { id, groupId });
 
 export interface Share {
   id: string;

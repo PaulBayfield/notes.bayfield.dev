@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  addDocumentGroup,
   addDocumentUser,
   createShare,
+  documentGroupMemberships,
   documentMemberships,
+  documentUsers,
+  listGroups,
   listUsers,
+  removeDocumentGroup,
   removeDocumentUser,
   shareInfo,
   updateShare,
   type Collection,
   type DocumentPermission,
+  type Group,
+  type GroupMembership,
   type Membership,
   type Share,
   type User,
@@ -56,38 +63,65 @@ function SharePanel({ documentId, collection, me, canInvite, canShare, onError, 
   const [members, setMembers] = useState<{ membership: Membership; user: User }[] | null>(null);
   const [shares, setShares] = useState<Share[] | null>(null);
   const [query, setQuery] = useState("");
+  const [groupMembers, setGroupMembers] = useState<{ membership: GroupMembership; group: Group }[] | null>(null);
+  // People who can open the page without being added to it, e.g. through the collection.
+  const [viaCollection, setViaCollection] = useState<User[]>([]);
+  // False when we may not see who was added directly, so we can't say how others got access.
+  const [membersKnown, setMembersKnown] = useState(true);
   const [results, setResults] = useState<User[]>([]);
+  const [groupResults, setGroupResults] = useState<Group[]>([]);
   const [newPermission, setNewPermission] = useState<DocumentPermission>("read_write");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
-      const [m, s] = await Promise.all([documentMemberships(documentId), shareInfo(documentId)]);
-      setMembers(m.memberships.map((membership) => ({ membership, user: m.users.find((u) => u.id === membership.userId)! })).filter((x) => x.user));
+      const [m, g, everyone, s] = await Promise.all([
+        // Only editors may list who was added directly; readers still see who can open the page.
+        documentMemberships(documentId).catch(() => null),
+        // Not every member may list a document's groups; show none rather than fail the panel.
+        documentGroupMemberships(documentId).catch(() => ({ groupMemberships: [], groups: [] })),
+        documentUsers(documentId).catch(() => [] as User[]),
+        shareInfo(documentId).catch(() => [] as Share[]),
+      ]);
+      setMembersKnown(!!m);
+      setViaCollection(everyone.filter((u) => !m?.memberships.some((x) => x.userId === u.id)).sort((a, b) => a.name.localeCompare(b.name)));
+      if (!m) setMembers([]);
+      else setMembers(m.memberships.map((membership) => ({ membership, user: m.users.find((u) => u.id === membership.userId)! })).filter((x) => x.user));
+      setGroupMembers(g.groupMemberships.map((membership) => ({ membership, group: g.groups.find((x) => x.id === membership.groupId)! })).filter((x) => x.group));
       setShares(s);
     } catch (e) {
       onError(e);
       setMembers([]);
+      setGroupMembers([]);
       setShares([]);
     }
   }, [documentId, onError]);
   useEffect(() => void load(), [load]);
 
-  // People search, for inviting.
+  // People and group search, for inviting.
   useEffect(() => {
-    if (!query.trim()) return setResults([]);
+    if (!query.trim()) {
+      setResults([]);
+      setGroupResults([]);
+      return;
+    }
     let cancelled = false;
     const timer = setTimeout(() => {
       listUsers(query.trim(), 6)
         .then((users) => !cancelled && setResults(users.filter((u) => u.id !== me.id && !members?.some((m) => m.user.id === u.id))))
+        .catch(() => {});
+      listGroups(query.trim(), 4)
+        .then((groups) => !cancelled && setGroupResults(groups.filter((g) => !groupMembers?.some((m) => m.group.id === g.id))))
         .catch(() => {});
     }, 150);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, me.id, members]);
+  }, [query, me.id, members, groupMembers]);
+
+  const memberCount = (g: Group) => (g.memberCount === 1 ? t("groupMember") : t("groupMembers", { count: g.memberCount }));
 
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     setBusy(true);
@@ -128,8 +162,31 @@ function SharePanel({ documentId, collection, me, canInvite, canShare, onError, 
           </select>
         </div>
       )}
-      {results.length > 0 && (
+      {(results.length > 0 || groupResults.length > 0) && (
         <div className="share-results">
+          {groupResults.map((g) => (
+            <button
+              key={g.id}
+              className="share-row clickable"
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  await addDocumentGroup(documentId, g.id, newPermission);
+                  setQuery("");
+                  input.current?.focus();
+                }, t("invited", { name: g.name }))
+              }
+            >
+              <span className="share-icon">
+                <Users size={15} />
+              </span>
+              <span className="share-name">
+                {g.name}
+                <span className="share-sub">{memberCount(g)}</span>
+              </span>
+              <span className="share-hint">{t("invite")}</span>
+            </button>
+          ))}
           {results.map((u) => (
             <button
               key={u.id}
@@ -161,6 +218,46 @@ function SharePanel({ documentId, collection, me, canInvite, canShare, onError, 
           <span className="share-sub">{workspaceAccess}</span>
         </span>
       </div>
+      {viaCollection.map((user) => (
+        <div key={user.id} className="share-row">
+          <Avatar user={user} size={26} />
+          <span className="share-name">
+            {user.name}
+            {(user.id === me.id || membersKnown) && <span className="share-sub">{user.id === me.id ? t("you") : t("viaCollection")}</span>}
+          </span>
+        </div>
+      ))}
+      {groupMembers?.map(({ membership, group }) => (
+        <div key={membership.id} className="share-row">
+          <span className="share-icon">
+            <Users size={15} />
+          </span>
+          <span className="share-name">
+            {group.name}
+            <span className="share-sub">{memberCount(group)}</span>
+          </span>
+          {canInvite ? (
+            <select
+              value={membership.permission}
+              disabled={busy}
+              aria-label={t("permission")}
+              onChange={(e) => {
+                const value = e.target.value;
+                void act(() => (value === "remove" ? removeDocumentGroup(documentId, group.id) : addDocumentGroup(documentId, group.id, value as DocumentPermission)));
+              }}
+            >
+              {PERMISSIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {t(label)}
+                </option>
+              ))}
+              <option value="remove">{t("removeAccess")}</option>
+            </select>
+          ) : (
+            <span className="share-hint">{t(PERMISSIONS.find(([v]) => v === membership.permission)?.[1] ?? "canView")}</span>
+          )}
+        </div>
+      ))}
       {members === null ? (
         <div className="skeleton-rows small" />
       ) : (
