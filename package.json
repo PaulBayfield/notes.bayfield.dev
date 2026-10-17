@@ -17,7 +17,7 @@
     "@tauri-apps/plugin-autostart": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.7.2",
     "fractional-index": "^1.0.0",
-    "katex": "^0.13.24",
+    "katex": "^0.18.2",
     "markdown-it": "^14.3.3",
     "markdown-it-mark": "^4.0.0",
     "mermaid": "^11.17.2",
