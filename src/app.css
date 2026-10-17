@@ -1000,10 +1000,46 @@ a.primary-button,
   display: flex;
   gap: 8px;
 }
-.emoji-input {
-  width: 64px;
-  flex: none;
+.icon-picker-tabs {
+  display: flex;
+  gap: 4px;
+}
+.icon-picker-tab {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.icon-picker-tab:hover {
+  background: var(--hover);
+}
+.icon-picker-tab.active {
+  background: var(--active);
+  color: var(--text);
+  font-weight: 500;
+}
+.emoji-grid {
+  max-height: 240px;
+}
+.emoji-cell {
+  font-size: 20px;
+  line-height: 1;
+}
+.emoji-category {
+  grid-column: 1 / -1;
+  padding: 8px 4px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.emoji-empty {
+  grid-column: 1 / -1;
+  padding: 16px;
   text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 .icon-grid {
   display: grid;
