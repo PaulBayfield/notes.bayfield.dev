@@ -1,6 +1,6 @@
 [package]
 name = "notes"
-version = "0.1.1"
+version = "0.1.2"
 description = "A lightweight Outline client"
 authors = ["bayfield"]
 edition = "2024"
