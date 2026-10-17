@@ -219,6 +219,7 @@ export async function demoCall(method: string, body: Record<string, unknown>): P
       return { data: method === "documents.search" ? hits.map((d) => ({ document: d, context: `… <b>${d.title}</b> …`, ranking: 1 })) : hits };
     }
     case "users.list":
+      if (Array.isArray(body.ids)) return { data: [me, friend, guest].filter((u) => (body.ids as string[]).includes(u.id)) };
       return { data: [me, friend, guest].filter((u) => u.name.toLowerCase().includes(String(body.query ?? "").toLowerCase())) };
     case "documents.update": {
       const doc = find(String(body.id));

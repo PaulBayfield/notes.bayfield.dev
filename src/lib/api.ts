@@ -61,6 +61,8 @@ export interface Doc {
   preferences?: { headingPrefix?: string } | null;
   createdBy?: User;
   updatedBy?: User;
+  /** People who have edited the document. */
+  collaboratorIds?: string[];
   revision?: number;
   text?: string;
 }
@@ -237,6 +239,8 @@ export const duplicateDocument = (id: string) => call<{ documents: Doc[] }>("doc
 
 export const listUsers = (query: string, limit = 8) =>
   call<User[]>("users.list", { query, limit, filter: "active" }).then((r) => r.data);
+
+export const usersByIds = (ids: string[]) => call<User[]>("users.list", { ids, limit: 100 }).then((r) => r.data);
 
 export interface Attachment {
   id: string;
@@ -467,6 +471,19 @@ export interface View {
 }
 
 export const listViews = (documentId: string) => call<View[]>("views.list", { documentId }).then((r) => r.data);
+
+const activityCache = new Map<string, { at: number; pending: Promise<{ views: View[]; revisions: Revision[] }> }>();
+
+/** Who viewed and edited a document, shared by the header's hover cards for half a minute. */
+export function documentActivity(documentId: string) {
+  const hit = activityCache.get(documentId);
+  if (hit && Date.now() - hit.at < 30_000) return hit.pending;
+  const pending = Promise.all([listViews(documentId).catch(() => [] as View[]), listRevisions(documentId).catch(() => [] as Revision[])]).then(
+    ([views, revisions]) => ({ views, revisions }),
+  );
+  activityCache.set(documentId, { at: Date.now(), pending });
+  return pending;
+}
 
 export interface UserDetails extends User {
   role?: string;

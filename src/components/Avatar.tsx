@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { resolveUrl, userDetails, type User, type UserDetails } from "../lib/api";
+import { documentActivity, resolveUrl, userDetails, type User, type UserDetails } from "../lib/api";
 import { useSettings } from "../lib/settings";
-import { Clock, Eye } from "./icons";
+import { Clock, Eye, Pencil } from "./icons";
 
 /** A user's picture, or their initial on their colour. */
 export function Avatar({ user, size = 24, className = "" }: { user: Pick<User, "name" | "color" | "avatarUrl">; size?: number; className?: string }) {
@@ -24,17 +24,37 @@ const ROLE_LABELS: Record<string, "roleAdmin" | "roleMember" | "roleViewer" | "r
 };
 
 /** The card shown when hovering someone who's in the document (like Outline's). */
-export function PresenceCard({ userId, name, color, status }: { userId: string; name: string; color: string; status: "viewing" | "editing" }) {
-  const { t, lang } = useSettings();
+export function PresenceCard({
+  userId,
+  name,
+  color,
+  status,
+  documentId,
+}: {
+  userId: string;
+  name: string;
+  color: string;
+  status: "viewing" | "editing" | "away";
+  /** The open page, to say when they last edited and viewed it. */
+  documentId?: string;
+}) {
+  const { t, lang, f } = useSettings();
   const [details, setDetails] = useState<UserDetails | null>(null);
+  const [activity, setActivity] = useState<{ edited?: string; viewed?: string } | null>(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     void userDetails(userId)
       .then(setDetails)
       .catch(() => {});
+    if (documentId)
+      void documentActivity(documentId).then(({ views, revisions }) => {
+        // Revisions come newest first.
+        const edit = revisions.find((r) => r.createdBy?.id === userId || r.collaborators?.some((c) => c.id === userId));
+        setActivity({ edited: edit?.createdAt, viewed: views.find((v) => v.user?.id === userId)?.lastViewedAt });
+      });
     const timer = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(timer);
-  }, [userId]);
+  }, [userId, documentId]);
 
   let localTime: string | null = null;
   if (details?.timezone) {
@@ -55,7 +75,7 @@ export function PresenceCard({ userId, name, color, status }: { userId: string; 
             {name}
             {role && role !== "roleMember" && <span className="role-badge">{t(role)}</span>}
           </div>
-          <div className="presence-card-status">{t("online")}</div>
+          {status !== "away" && <div className="presence-card-status">{t("online")}</div>}
         </div>
       </div>
       <div className="presence-card-rows">
@@ -64,9 +84,31 @@ export function PresenceCard({ userId, name, color, status }: { userId: string; 
             <Clock size={14} /> {t("localTime", { time: localTime })}
           </div>
         )}
-        <div>
-          <Eye size={14} /> {t(status === "editing" ? "currentlyEditing" : "currentlyViewing")}
-        </div>
+        {status !== "away" && (
+          <div>
+            <Eye size={14} /> {t(status === "editing" ? "currentlyEditing" : "currentlyViewing")}
+          </div>
+        )}
+        {activity?.edited && (
+          <div title={f.dateTime(activity.edited)}>
+            <Pencil size={14} /> {t("lastEditedPage", { time: f.relative(activity.edited) })}
+          </div>
+        )}
+        {status === "away" && activity?.viewed && (
+          <div title={f.dateTime(activity.viewed)}>
+            <Eye size={14} /> {t("lastViewedPage", { time: f.relative(activity.viewed) })}
+          </div>
+        )}
+        {status === "away" && details?.lastActiveAt && (
+          <div title={f.dateTime(details.lastActiveAt)}>
+            <Clock size={14} /> {t("lastActive", { time: f.relative(details.lastActiveAt) })}
+          </div>
+        )}
+        {status === "away" && activity && !activity.edited && !activity.viewed && (
+          <div>
+            <Pencil size={14} /> {t("editedThisPage")}
+          </div>
+        )}
       </div>
     </div>
   );

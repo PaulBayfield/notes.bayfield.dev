@@ -1061,6 +1061,9 @@ a.primary-button,
 .presence-avatar.editing {
   box-shadow: 0 0 0 2px var(--c);
 }
+.presence-avatar.away {
+  opacity: 0.5;
+}
 .hover-card-anchor {
   position: relative;
   display: inline-flex;

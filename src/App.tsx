@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { EditorView } from "prosemirror-view";
-import { AuthError, createDocument, moveCollection, moveDocument, publishDocument, type Doc } from "./lib/api";
+import { AuthError, createDocument, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isTauri } from "./lib/platform";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
@@ -93,6 +93,7 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [docStatus, setDocStatus] = useState<EditorStatus | undefined>();
   const [presence, setPresence] = useState<PresenceUser[]>([]);
+  const [collaborators, setCollaborators] = useState<User[]>([]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [token, setToken] = useState(session.collaborationToken ?? "");
   const [freshDocId, setFreshDocId] = useState<string | null>(null);
@@ -125,6 +126,19 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
     },
     [navigate, mobile],
   );
+
+  // People who have edited the open page, for the header (hidden when insights are off, as in Outline).
+  const collaboratorKey = meta && meta.doc.insightsEnabled !== false ? (meta.doc.collaboratorIds ?? []).join(",") : "";
+  useEffect(() => {
+    if (!collaboratorKey) return setCollaborators([]);
+    let cancelled = false;
+    usersByIds(collaboratorKey.split(","))
+      .then((users) => !cancelled && setCollaborators(users))
+      .catch(() => !cancelled && setCollaborators([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [collaboratorKey]);
 
   // Remember where we were, and reset per-document state when leaving a document.
   useEffect(() => {
@@ -375,6 +389,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           onForward={router.forward}
           status={route.name === "doc" ? docStatus : undefined}
           presence={presence}
+          collaborators={route.name === "doc" ? collaborators : []}
+          documentId={route.name === "doc" ? meta?.doc.id : undefined}
           starred={meta ? !!actions.isStarred(meta.doc.id) : routeCollection ? !!actions.isCollectionStarred(routeCollection.id) : undefined}
           onToggleStar={meta ? () => actions.toggleStar(meta.doc.id) : routeCollection ? () => actions.toggleCollectionStar(routeCollection.id) : undefined}
           docMenu={meta?.doc.collectionId ? <DropdownMenu title={t("more")} items={actions.docMenu()} /> : undefined}
