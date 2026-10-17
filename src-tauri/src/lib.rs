@@ -12,6 +12,9 @@
 //!   API doesn't send CORS headers) and lets `<img>` load attachments that need authentication.
 
 mod realtime;
+mod shell;
+
+use shell::show_main_window;
 
 use serde::{Deserialize, Serialize};
 use std::sync::{Mutex, RwLock};
@@ -96,14 +99,6 @@ fn normalize_server(input: &str) -> Result<String, String> {
         return Err("That doesn't look like a server address".into());
     }
     Ok(url.origin().ascii_serialization())
-}
-
-pub fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
 }
 
 // ---------- Sign-in ----------
@@ -386,7 +381,16 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Size and position are restored, visibility isn't: the shell decides whether to show it.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(tauri_plugin_window_state::StateFlags::all() - tauri_plugin_window_state::StateFlags::VISIBLE)
+                .build(),
+        )
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![shell::AUTOSTART_ARG]),
+        ))
         .manage(AppState {
             session: RwLock::new(load_session()),
             pending: Mutex::new(None),
@@ -400,13 +404,26 @@ pub fn run() {
             });
         })
         .setup(|app| {
+            shell::setup(app)?;
             let handle = app.handle().clone();
             restart_realtime(&handle);
             // Launched by an `outline://` link while not running.
             handle_args(&handle, &std::env::args().collect::<Vec<_>>());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![session_info, auth_config, sign_in, sign_in_with_browser, sign_out, save_file])
+        .on_window_event(shell::on_window_event)
+        .invoke_handler(tauri::generate_handler![
+            session_info,
+            auth_config,
+            sign_in,
+            sign_in_with_browser,
+            sign_out,
+            save_file,
+            shell::set_close_to_tray,
+            shell::set_start_minimized,
+            shell::set_tray_labels,
+            shell::set_tray_docs
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
