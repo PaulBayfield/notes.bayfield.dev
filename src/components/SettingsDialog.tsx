@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { isTauri } from "../lib/platform";
+import { getAutostart, setAutostart } from "../lib/desktop";
 import { useSettings, type Settings, type Theme } from "../lib/settings";
 import type { StringKey } from "../lib/i18n";
 import type { User } from "../lib/api";
@@ -49,6 +51,47 @@ export function ShortcutList() {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Launch at startup (and minimized or not), and what the close button does. */
+function DesktopSettings() {
+  const { t, settings, update } = useSettings();
+  const [autostart, setAutostartState] = useState<boolean | null>(null);
+  useEffect(() => {
+    getAutostart()
+      .then(setAutostartState)
+      .catch(() => setAutostartState(false));
+  }, []);
+  return (
+    <section className="settings-grid">
+      <h3>{t("desktop")}</h3>
+      <label>
+        <span>{t("launchAtStartup")}</span>
+        <input
+          type="checkbox"
+          className="switch"
+          checked={!!autostart}
+          disabled={autostart === null}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setAutostartState(on);
+            setAutostart(on).catch(() => setAutostartState(!on));
+          }}
+        />
+      </label>
+      <label className={autostart ? "" : "disabled"}>
+        <span>{t("startMinimized")}</span>
+        <input type="checkbox" className="switch" checked={settings.startMinimized} disabled={!autostart} onChange={(e) => update({ startMinimized: e.target.checked })} />
+      </label>
+      <label>
+        <span>
+          {t("closeToTray")}
+          <span className="settings-hint">{t("closeToTrayHint")}</span>
+        </span>
+        <input type="checkbox" className="switch" checked={settings.closeToTray} onChange={(e) => update({ closeToTray: e.target.checked })} />
+      </label>
+    </section>
   );
 }
 
@@ -140,6 +183,8 @@ export function SettingsDialog({ user, server, onClose, onSignOut }: { user: Use
             {toggle("spellcheck")}
           </label>
         </section>
+
+        {isTauri && <DesktopSettings />}
 
         <section>
           <h3>{t("account")}</h3>

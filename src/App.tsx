@@ -5,6 +5,7 @@ import { refreshCollaborationToken, restoreSession, signOut, type Session } from
 import { isTauri } from "./lib/platform";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
 import { SettingsProvider, useSettings } from "./lib/settings";
+import { clearTray, useDesktopSync, useTrayRecents } from "./lib/desktop";
 import { MOBILE_QUERY, useMediaQuery } from "./lib/useMediaQuery";
 import { useWorkspace } from "./lib/workspace";
 import type { EditorStatus, Heading } from "./editor/Editor";
@@ -113,6 +114,7 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
   );
 
   const workspace = useWorkspace(onError);
+  useDesktopSync(settings.closeToTray, settings.startMinimized, t);
   const router = useRouter(isTauri && settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" });
   const { route, navigate } = router;
 
@@ -156,6 +158,9 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located?.node.id]);
+
+  // The tray lists recently viewed pages; picking one opens it.
+  useTrayRecents(meta?.doc.id, t("untitled"), (id) => go({ name: "doc", id }));
 
   // Window title follows the document.
   const docTitle = meta ? meta.doc.title || t("untitled") : null;
@@ -332,7 +337,10 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
     return [...(wide ? out : out.slice(-1)), { label: meta.doc.title || t("untitled") }];
   }, [route, meta, located, workspace.collections, t, go, wide]);
 
-  const doSignOut = () => void signOut().finally(onSignedOut);
+  const doSignOut = () => {
+    clearTray();
+    void signOut().finally(onSignedOut);
+  };
 
   return (
     <div className="app">

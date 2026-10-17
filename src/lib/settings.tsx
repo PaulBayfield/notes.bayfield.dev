@@ -23,6 +23,10 @@ export interface Settings {
   lastServer: string;
   /** Reopened on launch. */
   lastPath: string;
+  /** Desktop: the close button hides the window to the tray instead of quitting. */
+  closeToTray: boolean;
+  /** Desktop: when launched at startup, stay in the tray. */
+  startMinimized: boolean;
 }
 
 const STORAGE_KEY = "notes.settings";
@@ -40,6 +44,8 @@ const DEFAULTS: Settings = {
   folded: [],
   lastServer: import.meta.env.VITE_OUTLINE_URL ?? "notes.bayfield.dev",
   lastPath: "",
+  closeToTray: true,
+  startMinimized: true,
 };
 
 function load(): Settings {
