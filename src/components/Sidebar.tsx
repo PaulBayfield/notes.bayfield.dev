@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from "react";
 import fractionalIndex from "fractional-index";
 import type { Collection, Doc, NavNode, Star as StarRecord } from "../lib/api";
 import type { Route } from "../lib/router";
@@ -54,6 +54,10 @@ interface Props {
 }
 
 type StarredItem = { kind: "doc"; star: StarRecord; doc: Doc } | { kind: "collection"; star: StarRecord; collection: Collection };
+
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 248;
 
 /** Top quarter: before, bottom quarter: after, middle: inside. */
 function zoneOf(e: DragEvent): "before" | "after" | "inside" {
@@ -133,8 +137,48 @@ export function Sidebar(p: Props) {
 
   const shared = workspace.shared.filter((d) => d.createdBy?.id !== p.meId);
 
+  // Dragging the right edge resizes; the width is saved once the drag ends.
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const width = dragWidth ?? settings.sidebarWidth ?? SIDEBAR_DEFAULT;
+  const startResize = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = width;
+    let next = startWidth;
+    const move = (ev: globalThis.PointerEvent) => {
+      next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth + ev.clientX - startX));
+      setDragWidth(next);
+    };
+    const end = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      document.body.classList.remove("resizing");
+      update({ sidebarWidth: next });
+      setDragWidth(null);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    document.body.classList.add("resizing");
+  };
+
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ "--sidebar-w": `${width}px` } as CSSProperties}>
+      <div
+        className="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-valuenow={width}
+        aria-valuemin={SIDEBAR_MIN}
+        aria-valuemax={SIDEBAR_MAX}
+        title={t("resizeSidebar")}
+        onPointerDown={startResize}
+        onDoubleClick={() => update({ sidebarWidth: SIDEBAR_DEFAULT })}
+      />
       <div className="sidebar-top" data-tauri-drag-region>
         <button className="icon-button" title={`${t("toggleSidebar")} (${mod}+B)`} onClick={p.onClose}>
           <PanelLeft />

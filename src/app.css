@@ -108,6 +108,34 @@ a.primary-button,
 
 /* ---------- Sidebar tree ---------- */
 
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -3px;
+  width: 6px;
+  z-index: 5;
+  cursor: col-resize;
+}
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.sidebar-resizer:hover::after,
+body.resizing .sidebar-resizer::after {
+  opacity: 0.6;
+}
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -540,6 +568,9 @@ a.primary-button,
     padding-top: env(safe-area-inset-top);
     box-shadow: var(--shadow);
     animation: drawer-in 180ms ease-out;
+  }
+  .sidebar-resizer {
+    display: none;
   }
   .drawer-backdrop {
     position: fixed;

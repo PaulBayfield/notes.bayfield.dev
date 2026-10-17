@@ -8,6 +8,8 @@ export interface Settings {
   theme: Theme;
   language: "auto" | Lang;
   sidebar: boolean;
+  /** Sidebar width in pixels, set by dragging its edge. */
+  sidebarWidth: number;
   /** Right panel: the document's table of contents and details. */
   panel: boolean;
   /** Documents use the full window width instead of a reading column. */
@@ -35,6 +37,7 @@ const DEFAULTS: Settings = {
   theme: "system",
   language: "auto",
   sidebar: true,
+  sidebarWidth: 248,
   panel: false,
   fullWidth: false,
   font: "sans",
