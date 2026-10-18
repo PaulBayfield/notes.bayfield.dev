@@ -11,6 +11,9 @@
   [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev)
   [![Rust](https://img.shields.io/badge/Rust-2024-orange)](https://www.rust-lang.org)
   [![Outline](https://img.shields.io/badge/Outline-compatible-black)](https://github.com/outline/outline)
+
+  <br />
+  <img src="docs/screenshots/editor.jpg" alt="A document open in Notes, with the sidebar of collections" width="900" />
 </div>
 
 
@@ -27,6 +30,7 @@ expect missing pieces, sharp edges, and breaking changes.
 
 - [📖 • Overview](#--overview)
 - [✨ • Features](#--features)
+- [🖼️ • Screenshots](#️--screenshots)
 - [🧩 • How it talks to Outline](#--how-it-talks-to-outline)
 - [🛠️ • Tech Stack](#️--tech-stack)
 - [🚀 • Getting Started](#--getting-started)
@@ -80,6 +84,20 @@ day, even on a modest laptop.
 - **Navigation:** search (`Ctrl+K`), contents panel, back/forward, archive/delete with undo
 - **Themes:** System, Light, Dark, Rosé Pine, Rosé Pine Dawn. UI in French or English
 - **Offline:** open documents are cached locally and sync when you're back
+
+
+## 🖼️ • Screenshots
+
+Taken in [Demo Mode](#--demo-mode).
+
+| | |
+|---|---|
+| ![Home with pinned and recent documents, in Rosé Pine Dawn](docs/screenshots/home.jpg) | ![The / block menu in the editor, in Rosé Pine](docs/screenshots/blocks.jpg) |
+| **Home:** pinned and recent documents (Rosé Pine Dawn) | **Editor:** the `/` block menu (Rosé Pine) |
+
+![A collaborator's presence card and the contents panel](docs/screenshots/presence.jpg)
+
+**Presence:** hover a collaborator to see their local time and what they're doing, next to the contents and details panel.
 
 
 ## 🧩 • How it talks to Outline
@@ -187,6 +205,7 @@ notes.bayfield.dev/
 │   ├── ci.yml                  # Type-check & build (web), opt-in Rust check, Docker build on PRs
 │   ├── deployment.yaml         # Publishes the web image to ghcr.io on every push to main
 │   └── release.yml             # Builds the Windows installers on version tags
+├── docs/screenshots/           # README screenshots
 ├── public/                     # Favicon & touch icon
 ├── scripts/
 │   └── gen-outline-icons.mjs   # Generates src/lib/outlineIcons.ts
