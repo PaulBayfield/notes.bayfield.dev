@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { destroyDocument, emptyTrash, listArchived, listDeleted, listDrafts, restoreDocument, type Doc } from "../lib/api";
+import { deleteDocument, destroyDocument, emptyTrash, listArchived, listDeleted, listDrafts, restoreDocument, type Doc } from "../lib/api";
 import { onRealtime } from "../lib/realtime";
 import type { ListPage, Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
@@ -26,7 +26,7 @@ export function DocListPage({
 }) {
   const { t, f } = useSettings();
   const [docs, setDocs] = useState<Doc[] | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: "destroy"; doc: Doc } | { kind: "empty" } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: "destroy" | "trash"; doc: Doc } | { kind: "empty" } | null>(null);
 
   const load = useCallback(() => {
     LOADERS[page]()
@@ -107,6 +107,11 @@ export function DocListPage({
                       <Restore size={14} />
                     </button>
                   )}
+                  {page === "archive" && (
+                    <button className="icon-button small danger" title={t("delete")} onClick={() => setConfirm({ kind: "trash", doc: d })}>
+                      <Trash size={14} />
+                    </button>
+                  )}
                   {page === "trash" && (
                     <button className="icon-button small danger" title={t("deleteForever")} onClick={() => setConfirm({ kind: "destroy", doc: d })}>
                       <Trash size={14} />
@@ -120,15 +125,23 @@ export function DocListPage({
       </div>
       {confirm && (
         <ConfirmDialog
-          title={confirm.kind === "empty" ? t("emptyTrash") : t("deleteForever")}
-          message={confirm.kind === "empty" ? t("emptyTrashMessage") : t("deleteForeverMessage", { title: confirm.doc.title || t("untitled") })}
+          title={confirm.kind === "empty" ? t("emptyTrash") : confirm.kind === "trash" ? t("deleteDocTitle") : t("deleteForever")}
+          message={
+            confirm.kind === "empty"
+              ? t("emptyTrashMessage")
+              : t(confirm.kind === "trash" ? "deleteDocMessage" : "deleteForeverMessage", { title: confirm.doc.title || t("untitled") })
+          }
           confirm={t("delete")}
           danger
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
             try {
               if (confirm.kind === "empty") await emptyTrash();
-              else await destroyDocument(confirm.doc.id);
+              else if (confirm.kind === "trash") {
+                // Archived documents go to the trash first, as in Outline.
+                await deleteDocument(confirm.doc.id);
+                flash(t("deleted"));
+              } else await destroyDocument(confirm.doc.id);
               load();
             } catch (e) {
               onError(e);

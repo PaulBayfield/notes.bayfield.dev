@@ -300,7 +300,7 @@ export function useDocumentActions(p: Params) {
       },
       { label: t("searchInDocument"), icon: <Search size={15} />, kbd: `${mod}+F`, onClick: () => setFindOpen(true) },
       { kind: "separator" },
-      canUpdate && { label: t("delete"), icon: <Trash size={15} />, danger: true, onClick: () => setDialog({ kind: "delete", target }) },
+      meta.canDelete && { label: t("delete"), icon: <Trash size={15} />, danger: true, onClick: () => setDialog({ kind: "delete", target }) },
       { kind: "separator" },
       canUpdate && {
         kind: "submenu",

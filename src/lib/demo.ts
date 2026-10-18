@@ -205,7 +205,7 @@ export async function demoCall(method: string, body: Record<string, unknown>): P
     case "documents.info": {
       const doc = find(String(body.id));
       if (!doc) throw Object.assign(new Error("Not found"), { status: 404 });
-      return { data: doc, policies: [{ id: doc.id, abilities: { update: true, manageUsers: true, share: true } }] };
+      return { data: doc, policies: [{ id: doc.id, abilities: { update: true, manageUsers: true, share: true, delete: true } }] };
     }
     case "documents.list":
     case "documents.viewed":

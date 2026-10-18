@@ -19,6 +19,8 @@ export interface DocMeta {
   canUpdate: boolean;
   canInvite: boolean;
   canShare: boolean;
+  /** Archived documents can be deleted without being editable. */
+  canDelete: boolean;
 }
 
 interface Props {
@@ -67,6 +69,7 @@ export function DocumentView(p: Props) {
         canUpdate: can(res, res.data.id, "update"),
         canInvite: can(res, res.data.id, "manageUsers"),
         canShare: can(res, res.data.id, "share"),
+        canDelete: can(res, res.data.id, "delete"),
       };
       setMeta(next);
       loadedId.current = res.data.id;
