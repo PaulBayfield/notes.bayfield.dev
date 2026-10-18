@@ -134,8 +134,11 @@ function NotesApp({
 
   const workspace = useWorkspace(onError);
   useDesktopSync(settings.closeToTray, settings.startMinimized, t);
-  const router = useRouter(isTauri && settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" });
+  // Opens on the last page visited.
+  const router = useRouter(settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" });
   const { route, navigate } = router;
+  /** The page reopened on launch, until it loads: if it's gone, go home instead. */
+  const reopened = useRef(route.name === "doc" ? route.id : null);
 
   const go = useCallback(
     (r: Route) => {
@@ -160,7 +163,7 @@ function NotesApp({
 
   // Remember where we were, and reset per-document state when leaving a document.
   useEffect(() => {
-    if (isTauri) update({ lastPath: routePath(route) });
+    update({ lastPath: routePath(route) });
     if (route.name !== "doc") {
       setMeta(null);
       setDocStatus(undefined);
@@ -504,7 +507,11 @@ function NotesApp({
             user={session.user}
             autoFocusTitle={freshDocId === route.id}
             refreshToken={refreshToken}
-            onLoaded={setMeta}
+            onLoaded={(m) => {
+              if (!m && reopened.current === route.id) navigate({ name: "home" }, true);
+              reopened.current = null;
+              setMeta(m);
+            }}
             onTitleChange={(id, title) => {
               workspace.renameLocal(id, title);
               setMeta((m) => (m && m.doc.id === id ? { ...m, doc: { ...m.doc, title } } : m));

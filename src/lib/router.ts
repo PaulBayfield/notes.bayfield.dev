@@ -19,10 +19,17 @@ export function routePath(r: Route): string {
   return r.name;
 }
 
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The id in a path segment: a whole UUID, or the url id after Outline's "title-" slug. */
+function idOf(segment: string): string {
+  return segment.match(UUID)?.[0] ?? segment.slice(segment.lastIndexOf("-") + 1);
+}
+
 export function parseRoute(path: string): Route {
-  const m = path.match(/^\/?(doc|collection)\/(?:[^/]*-)?([\w-]+)\/?$/);
-  if (m?.[1] === "doc") return { name: "doc", id: m[2] };
-  if (m?.[1] === "collection") return { name: "collection", id: m[2] };
+  const m = path.match(/^\/?(doc|collection)\/([^/]+)\/?$/);
+  if (m?.[1] === "doc") return { name: "doc", id: idOf(m[2]) };
+  if (m?.[1] === "collection") return { name: "collection", id: idOf(m[2]) };
   const page = path.replace(/^\/|\/$/g, "") as ListPage;
   if (LIST_PAGES.includes(page)) return { name: page };
   return { name: "home" };
@@ -38,7 +45,9 @@ interface History {
 export function useRouter(initial: Route) {
   const [history, setHistory] = useState<History>(() => {
     if (!isTauri) {
-      const fromUrl = parseRoute(location.pathname.slice(BASE.length - 1));
+      // A link to a page opens it; the bare app address reopens the last page.
+      const parsed = parseRoute(location.pathname.slice(BASE.length - 1));
+      const fromUrl = parsed.name === "home" ? initial : parsed;
       window.history.replaceState({ i: 0 }, "", BASE + routePath(fromUrl) + location.search);
       return { stack: [fromUrl], index: 0 };
     }
