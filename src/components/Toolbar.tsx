@@ -25,6 +25,10 @@ interface Props {
   onForward: () => void;
   status?: EditorStatus;
   presence: PresenceUser[];
+  /** People who have edited the open page; shown faded unless they're here now. */
+  collaborators?: User[];
+  /** The open page, for the hover cards' "last edited / viewed" lines. */
+  documentId?: string;
   starred?: boolean;
   onToggleStar?: () => void;
   docMenu?: ReactNode;
@@ -36,6 +40,8 @@ interface Props {
   onTogglePanel: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  /** The notifications bell. */
+  notifications?: ReactNode;
 }
 
 export function Toolbar(p: Props) {
@@ -73,7 +79,7 @@ export function Toolbar(p: Props) {
       </nav>
       <StatusDot status={p.status} />
       <div className="toolbar-spacer" data-tauri-drag-region />
-      <Presence users={p.presence} />
+      <Presence users={p.presence} collaborators={p.collaborators ?? []} me={p.user} documentId={p.documentId} />
       {p.onToggleStar && (
         <button className={`icon-button${p.starred ? " active starred" : ""}`} title={t(p.starred ? "unstar" : "star")} onClick={p.onToggleStar}>
           <Star filled={p.starred} />
@@ -82,6 +88,7 @@ export function Toolbar(p: Props) {
       {p.share}
       {p.publish}
       {p.docMenu}
+      {p.notifications}
       <AccountMenu user={p.user} onOpenSettings={p.onOpenSettings} onSignOut={p.onSignOut} />
       <button
         className={`icon-button panel-toggle${p.panelVisible ? " active" : ""}`}
@@ -117,30 +124,52 @@ function StatusDot({ status }: { status?: EditorStatus }) {
   );
 }
 
-function PresenceAvatar({ user }: { user: PresenceUser }) {
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+interface Face {
+  id: string;
+  name: string;
+  color: string;
+  avatarUrl?: string | null;
+  status: "editing" | "viewing" | "away";
+}
+
+function PresenceAvatar({ face, documentId }: { face: Face; documentId?: string }) {
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(face.avatarUrl ?? null);
   useEffect(() => {
-    void userDetails(user.id)
+    if (face.avatarUrl !== undefined) return;
+    void userDetails(face.id)
       .then((d) => setAvatarUrl(d.avatarUrl))
       .catch(() => {});
-  }, [user.id]);
+  }, [face.id, face.avatarUrl]);
   return (
-    <HoverCard card={() => <PresenceCard userId={user.id} name={user.name} color={user.color} status={user.editing ? "editing" : "viewing"} />}>
-      <span className={`presence-avatar${user.editing ? " editing" : ""}`} style={{ ["--c" as string]: user.color }}>
-        <Avatar user={{ name: user.name, color: user.color, avatarUrl }} size={24} />
+    <HoverCard card={() => <PresenceCard userId={face.id} name={face.name} color={face.color} status={face.status} documentId={documentId} />}>
+      <span className={`presence-avatar ${face.status}`} style={{ ["--c" as string]: face.color }}>
+        <Avatar user={{ name: face.name, color: face.color, avatarUrl }} size={24} />
       </span>
     </HoverCard>
   );
 }
 
-function Presence({ users }: { users: PresenceUser[] }) {
-  if (!users.length) return null;
+const MAX_FACES = 6;
+
+/**
+ * Who is here now, then who has edited the page before (as Outline's header does). You're left
+ * out: your account picture sits right next to them.
+ */
+function Presence({ users, collaborators, me, documentId }: { users: PresenceUser[]; collaborators: User[]; me: User; documentId?: string }) {
+  const faces: Face[] = users.filter((u) => u.id !== me.id).map((u) => ({ id: u.id, name: u.name, color: u.color, status: u.editing ? "editing" : "viewing" }));
+  for (const c of collaborators) {
+    if (c.id === me.id) continue;
+    const here = faces.find((f) => f.id === c.id);
+    if (here) here.avatarUrl ??= c.avatarUrl;
+    else faces.push({ id: c.id, name: c.name, color: c.color, avatarUrl: c.avatarUrl, status: "away" });
+  }
+  if (!faces.length) return null;
   return (
     <div className="presence">
-      {users.slice(0, 5).map((u) => (
-        <PresenceAvatar key={u.id} user={u} />
+      {faces.slice(0, MAX_FACES).map((f) => (
+        <PresenceAvatar key={f.id} face={f} documentId={documentId} />
       ))}
-      {users.length > 5 && <span className="presence-more">+{users.length - 5}</span>}
+      {faces.length > MAX_FACES && <span className="presence-more">+{faces.length - MAX_FACES}</span>}
     </div>
   );
 }

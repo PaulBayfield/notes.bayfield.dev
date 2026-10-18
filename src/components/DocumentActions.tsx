@@ -28,6 +28,7 @@ import {
   type Collection,
   type Pin,
   type Subscription,
+  type User,
 } from "../lib/api";
 import { embedsEnabled, setEmbedsEnabled } from "../lib/docPrefs";
 import { mod, openExternal, saveTextFile } from "../lib/platform";
@@ -36,7 +37,8 @@ import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
 import type { HeadingPrefixStyle } from "../editor/headingPrefix";
 import { CollectionDialog } from "./CollectionDialog";
-import { ConfirmDialog, MoveDialog } from "./Dialogs";
+import { ConfirmDialog, Dialog as Modal, MoveDialog } from "./Dialogs";
+import { SharePanel } from "./ShareButton";
 import type { DocMeta } from "./DocumentView";
 import type { PanelTab } from "./Panel";
 import { Presentation } from "./Presentation";
@@ -70,6 +72,7 @@ import {
 
 interface Params {
   workspace: Workspace;
+  me: User;
   meta: DocMeta | null;
   viewRef: RefObject<EditorView | null>;
   go: (r: Route) => void;
@@ -87,6 +90,7 @@ type Dialog =
   | { kind: "collection"; collection?: Collection }
   | { kind: "deleteCollection"; collection: Collection }
   | { kind: "present" }
+  | { kind: "permissions" }
   | null;
 
 const UNDO_MS = 6000;
@@ -132,6 +136,13 @@ export function useDocumentActions(p: Params) {
   // ---------- Shared actions ----------
 
   const isStarred = (id: string) => workspace.stars.stars.find((s) => s.documentId === id);
+  const isCollectionStarred = (id: string) => workspace.stars.stars.find((s) => s.collectionId === id);
+  const toggleCollectionStar = (id: string) =>
+    run(async () => {
+      const existing = isCollectionStarred(id);
+      await (existing ? unstar(existing.id) : starCollection(id));
+      await workspace.refreshStars();
+    });
   const toggleStar = (id: string) =>
     run(async () => {
       const existing = isStarred(id);
@@ -218,7 +229,7 @@ export function useDocumentActions(p: Params) {
         }),
       },
       { kind: "separator" },
-      { label: t("permissions"), icon: <Lock size={15} />, onClick: () => void openExternal(webUrl(doc.url)) },
+      (meta.canInvite || meta.canShare) && { label: t("permissions"), icon: <Lock size={15} />, onClick: () => setDialog({ kind: "permissions" }) },
       canUpdate && { label: t("templatize"), icon: <Shapes size={15} />, onClick: run(() => templatizeDocument(doc.id), t("templateCreated")) },
       { label: t("duplicate"), icon: <CopyPlus size={15} />, onClick: duplicate(target) },
       canUpdate &&
@@ -333,7 +344,11 @@ export function useDocumentActions(p: Params) {
     menu([
       { label: t("newDoc"), icon: <FilePlus size={15} />, onClick: () => void p.newDoc(c.id) },
       { label: t("editCollection"), icon: <Pencil size={15} />, onClick: () => setDialog({ kind: "collection", collection: c }) },
-      { label: t("star"), icon: <Star size={15} />, onClick: run(async () => (await starCollection(c.id), workspace.refreshStars())) },
+      {
+        label: t(isCollectionStarred(c.id) ? "unstar" : "star"),
+        icon: <Star size={15} filled={!!isCollectionStarred(c.id)} />,
+        onClick: toggleCollectionStar(c.id),
+      },
       { kind: "separator" },
       { label: t("copyLink"), icon: <LinkIcon size={15} />, onClick: () => copyText(webUrl(`/collection/${c.urlId}`), t("linkCopied")) },
       { label: t("openInBrowser"), icon: <External size={15} />, onClick: () => void openExternal(webUrl(`/collection/${c.urlId}`)) },
@@ -420,6 +435,21 @@ export function useDocumentActions(p: Params) {
     );
   else if (dialog?.kind === "present" && meta && p.viewRef.current)
     overlay = <Presentation title={meta.doc.title} icon={meta.doc.icon} color={meta.doc.color} doc={p.viewRef.current.state.doc} onClose={close} />;
+  else if (dialog?.kind === "permissions" && meta)
+    overlay = (
+      <Modal title={t("shareDocument", { title: meta.doc.title || t("untitled") })} onClose={close}>
+        <SharePanel
+          embedded
+          documentId={meta.doc.id}
+          collection={workspace.collections.find((c) => c.id === meta.doc.collectionId)}
+          me={p.me}
+          canInvite={meta.canInvite}
+          canShare={meta.canShare}
+          onError={onError}
+          flash={flash}
+        />
+      </Modal>
+    );
 
   overlay = (
     <>
@@ -461,5 +491,7 @@ export function useDocumentActions(p: Params) {
     },
     isStarred,
     toggleStar: (id: string) => toggleStar(id)(),
+    isCollectionStarred,
+    toggleCollectionStar: (id: string) => toggleCollectionStar(id)(),
   };
 }

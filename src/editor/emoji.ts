@@ -49,3 +49,28 @@ export async function searchEmoji(query: string, limit = 8): Promise<{ name: str
     }
   return out;
 }
+
+export interface EmojiCategory {
+  id: string;
+  emojis: { native: string; name: string; search: string }[];
+}
+
+let catalog: Promise<EmojiCategory[]> | null = null;
+
+/** Every emoji, grouped by emoji-mart's categories, for the icon picker. */
+export function loadEmojiCatalog(): Promise<EmojiCategory[]> {
+  catalog ??= import("@emoji-mart/data").then(({ default: data }) => {
+    const d = data as {
+      categories: { id: string; emojis: string[] }[];
+      emojis: Record<string, { id: string; name: string; keywords?: string[]; skins: { native: string }[] }>;
+    };
+    return d.categories.map((c) => ({
+      id: c.id,
+      emojis: c.emojis.flatMap((id) => {
+        const e = d.emojis[id];
+        return e ? [{ native: e.skins[0].native, name: e.name, search: [e.id, e.name, ...(e.keywords ?? [])].join(" ").toLowerCase() }] : [];
+      }),
+    }));
+  });
+  return catalog;
+}

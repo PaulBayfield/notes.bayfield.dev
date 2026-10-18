@@ -1,10 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { setBlockType, toggleMark } from "prosemirror-commands";
 import { addColumnAfter, addRowAfter, CellSelection, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
-import { listUsers, searchTitles, type User } from "../lib/api";
+import { listCollections, listGroups, listUsers, recentlyViewed, searchTitles, type Collection, type Group, type User } from "../lib/api";
+import { EntityIcon } from "../components/EntityIcon";
+import { CalendarIcon, Users as UsersIcon } from "../components/icons";
+import { dateLabel, dateLong, datesFor } from "./dates";
 import type { StringKey, Translate } from "../lib/i18n";
 import { blocks, findParent, insertBlock, isBlockActive, isMarkActive, toggleHeading, toggleList, toggleWrap } from "./commands";
 import { searchEmoji } from "./emoji";
@@ -18,8 +21,22 @@ interface Item {
   label: string;
   hint?: string;
   icon: ReactNode;
+  /** A heading shown above the first item of each section. */
+  section?: string;
   run: (view: EditorView) => void;
 }
+
+/** Collections change rarely: fetched once a minute at most for mentions. */
+let collectionCache: { at: number; list: Promise<Collection[]> } | null = null;
+function mentionableCollections(): Promise<Collection[]> {
+  if (!collectionCache || Date.now() - collectionCache.at > 60_000) {
+    const list = listCollections().catch(() => [] as Collection[]);
+    collectionCache = { at: Date.now(), list };
+  }
+  return collectionCache.list;
+}
+
+const MENTION_LIMIT = 5;
 
 /** Removes the "/query" text, then runs the block command on the now-empty paragraph. */
 function replaceTrigger(view: EditorView, s: SuggestState) {
@@ -127,11 +144,15 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
         ),
       );
     } else {
-      // Mentions: people first, then documents. Debounced, these hit the server.
+      // Mentions: dates (when the query reads as one), then people, documents, groups and
+      // collections, as in Outline. Debounced, these hit the server.
       const timer = setTimeout(async () => {
-        const [users, docs] = await Promise.all([
-          listUsers(query, 5).catch(() => [] as User[]),
-          query ? searchTitles(query, 6).catch(() => []) : Promise.resolve([]),
+        const q = normalize(query);
+        const [users, docs, groups, collections] = await Promise.all([
+          listUsers(query, MENTION_LIMIT).catch(() => [] as User[]),
+          (query ? searchTitles(query, MENTION_LIMIT) : recentlyViewed(MENTION_LIMIT)).catch(() => []),
+          listGroups(query, 3).catch(() => [] as Group[]),
+          mentionableCollections().then((list) => list.filter((c) => !q || normalize(c.name).includes(q)).slice(0, 3)),
         ]);
         const mention = (attrs: Record<string, unknown>) => (v: EditorView) => {
           const current = suggestKey.getState(v.state);
@@ -141,20 +162,45 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
           v.dispatch(tr.scrollIntoView());
           v.focus();
         };
+        const lang = document.documentElement.lang;
         done([
-          ...users.map((u) => ({
+          ...datesFor(query).map((iso, i) => ({
+            key: `t${iso}`,
+            label: dateLabel(iso, lang),
+            hint: dateLong(iso, lang),
+            section: i === 0 ? t("mentionDates") : undefined,
+            icon: <CalendarIcon size={15} />,
+            // Outline stores the day in both: the label is worked out when shown.
+            run: mention({ type: "date", label: iso, modelId: iso }),
+          })),
+          ...users.map((u, i) => ({
             key: `u${u.id}`,
             label: u.name,
-            hint: t("person"),
+            section: i === 0 ? t("mentionPeople") : undefined,
             icon: <span className="menu-avatar" style={{ background: u.color }}>{u.name.charAt(0).toUpperCase()}</span>,
             run: mention({ type: "user", label: u.name, modelId: u.id }),
           })),
-          ...docs.map((d) => ({
+          ...docs.map((d, i) => ({
             key: `d${d.id}`,
             label: d.title || t("untitled"),
-            hint: t("document"),
-            icon: "📄",
+            section: i === 0 ? t("documents") : undefined,
+            icon: <EntityIcon icon={d.icon} color={d.color} size={16} fallback="📄" />,
             run: mention({ type: "document", label: d.title || t("untitled"), modelId: d.id }),
+          })),
+          ...groups.map((g, i) => ({
+            key: `g${g.id}`,
+            label: g.name,
+            hint: g.memberCount === 1 ? t("groupMember") : t("groupMembers", { count: g.memberCount }),
+            section: i === 0 ? t("groups") : undefined,
+            icon: <UsersIcon size={15} />,
+            run: mention({ type: "group", label: g.name, modelId: g.id }),
+          })),
+          ...collections.map((c, i) => ({
+            key: `c${c.id}`,
+            label: c.name,
+            section: i === 0 ? t("collections") : undefined,
+            icon: <EntityIcon icon={c.icon} color={c.color} size={16} fallback={<span className="collection-dot" style={{ ["--c" as string]: c.color ?? "var(--primary)" }} />} />,
+            run: mention({ type: "collection", label: c.name, modelId: c.id }),
           })),
         ]);
       }, 150);
@@ -209,11 +255,14 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
       onMouseDown={(e) => e.preventDefault()}
     >
       {items.map((item, i) => (
-        <button key={item.key} className={i === active ? "active" : ""} onMouseEnter={() => setActive(i)} onClick={() => item.run(view)}>
-          <span className="menu-icon">{item.icon}</span>
-          <span className="menu-text">{item.label}</span>
-          {item.hint && <span className="menu-hint">{item.hint}</span>}
-        </button>
+        <Fragment key={item.key}>
+          {item.section && <div className="menu-section">{item.section}</div>}
+          <button className={i === active ? "active" : ""} onMouseEnter={() => setActive(i)} onClick={() => item.run(view)}>
+            <span className="menu-icon">{item.icon}</span>
+            <span className="menu-text">{item.label}</span>
+            {item.hint && <span className="menu-hint">{item.hint}</span>}
+          </button>
+        </Fragment>
       ))}
     </div>
   );

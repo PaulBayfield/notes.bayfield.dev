@@ -1,9 +1,10 @@
-import { useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from "react";
 import fractionalIndex from "fractional-index";
-import type { Collection, NavNode } from "../lib/api";
+import type { Collection, Doc, NavNode, Star as StarRecord, Team } from "../lib/api";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
+import { Avatar } from "./Avatar";
 import { EntityIcon } from "./EntityIcon";
 import { mod } from "../lib/platform";
 import { Archive, ChevronRight, Compose, FileText, Home, PanelLeft, Pencil, Plus, Search, Star, Trash } from "./icons";
@@ -37,6 +38,8 @@ interface DragState {
 
 interface Props {
   workspace: Workspace;
+  /** The signed-in user. */
+  meId: string;
   route: Route;
   /** Canonical id of the open document, once loaded. */
   activeDocId?: string;
@@ -48,8 +51,17 @@ interface Props {
   onMove: (id: string, target: DropTarget) => void;
   onMoveCollection: (id: string, index: string) => void;
   onNewCollection: () => void;
+  team: Team;
+  /** The workspace name was clicked. */
+  onOpenWorkspace: () => void;
   onCollectionMenu: (collection: Collection, e: MouseEvent) => void;
 }
+
+type StarredItem = { kind: "doc"; star: StarRecord; doc: Doc } | { kind: "collection"; star: StarRecord; collection: Collection };
+
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 248;
 
 /** Top quarter: before, bottom quarter: after, middle: inside. */
 function zoneOf(e: DragEvent): "before" | "after" | "inside" {
@@ -116,8 +128,61 @@ export function Sidebar(p: Props) {
     },
   };
 
+  // Starred documents and collections, in the order they were starred (or rearranged in Outline).
+  const starred = workspace.stars.stars
+    .slice()
+    .sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0))
+    .flatMap((star): StarredItem[] => {
+      const doc = star.documentId && workspace.stars.documents.find((d) => d.id === star.documentId);
+      if (doc) return [{ kind: "doc", star, doc }];
+      const collection = star.collectionId && workspace.collections.find((c) => c.id === star.collectionId);
+      return collection ? [{ kind: "collection", star, collection }] : [];
+    });
+
+  const shared = workspace.shared.filter((d) => d.createdBy?.id !== p.meId);
+
+  // Dragging the right edge resizes; the width is saved once the drag ends.
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const width = dragWidth ?? settings.sidebarWidth ?? SIDEBAR_DEFAULT;
+  const startResize = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startWidth = width;
+    let next = startWidth;
+    const move = (ev: globalThis.PointerEvent) => {
+      next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth + ev.clientX - startX));
+      setDragWidth(next);
+    };
+    const end = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+      document.body.classList.remove("resizing");
+      update({ sidebarWidth: next });
+      setDragWidth(null);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    document.body.classList.add("resizing");
+  };
+
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ "--sidebar-w": `${width}px` } as CSSProperties}>
+      <div
+        className="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-valuenow={width}
+        aria-valuemin={SIDEBAR_MIN}
+        aria-valuemax={SIDEBAR_MAX}
+        title={t("resizeSidebar")}
+        onPointerDown={startResize}
+        onDoubleClick={() => update({ sidebarWidth: SIDEBAR_DEFAULT })}
+      />
       <div className="sidebar-top" data-tauri-drag-region>
         <button className="icon-button" title={`${t("toggleSidebar")} (${mod}+B)`} onClick={p.onClose}>
           <PanelLeft />
@@ -131,13 +196,41 @@ export function Sidebar(p: Props) {
         </button>
       </div>
       <nav className="sidebar-nav">
+        <button className="sidebar-row workspace-row" title={p.team.name} onClick={p.onOpenWorkspace}>
+          <Avatar user={{ name: p.team.name, color: "var(--primary)", avatarUrl: p.team.avatarUrl }} size={22} className="square" />
+          <span>{p.team.name}</span>
+        </button>
         <button className={`sidebar-row${p.route.name === "home" ? " active" : ""}`} onClick={() => p.onNavigate({ name: "home" })}>
           <Home />
           <span>{t("home")}</span>
         </button>
       </nav>
       <div className="sidebar-scroll">
-        {workspace.stars.documents.length > 0 && (
+        {shared.length > 0 && (
+          <section className="tree-group">
+            <button className="tree-group-title" onClick={() => toggleFold("shared")}>
+              <span>{t("sharedWithMe")}</span>
+              <span className={`fold-chevron${folded.has("shared") ? "" : " open"}`}>
+                <ChevronRight size={12} />
+              </span>
+            </button>
+            {!folded.has("shared") &&
+              shared.map((doc) => (
+                <button
+                  key={doc.id}
+                  className={`tree-row${isActive(doc.id) ? " active" : ""}`}
+                  style={{ "--depth": 0 } as CSSProperties}
+                  onClick={() => p.onNavigate({ name: "doc", id: doc.id })}
+                  onContextMenu={(e) => doc.collectionId && p.onContextMenu({ id: doc.id, title: doc.title, url: doc.url, collectionId: doc.collectionId }, e)}
+                >
+                  <span className="tree-chevron-space" />
+                  <DocIcon icon={doc.icon} color={doc.color} />
+                  <span className="tree-title">{doc.title || t("untitled")}</span>
+                </button>
+              ))}
+          </section>
+        )}
+        {starred.length > 0 && (
           <section className="tree-group">
             <button className="tree-group-title" onClick={() => toggleFold("starred")}>
               <span>{t("starred")}</span>
@@ -146,24 +239,38 @@ export function Sidebar(p: Props) {
               </span>
             </button>
             {!folded.has("starred") &&
-              workspace.stars.stars
-                .slice()
-                .sort((a, b) => (a.index < b.index ? -1 : 1))
-                .map((s) => workspace.stars.documents.find((d) => d.id === s.documentId))
-                .filter((d) => !!d)
-                .map((d) => (
+              starred.map((s) =>
+                s.kind === "collection" ? (
                   <button
-                    key={d.id}
-                    className={`tree-row${isActive(d.id) ? " active" : ""}`}
-                    style={{ "--depth": 0 } as CSSProperties}
-                    onClick={() => p.onNavigate({ name: "doc", id: d.id })}
-                    onContextMenu={(e) => d.collectionId && p.onContextMenu({ id: d.id, title: d.title, url: d.url, collectionId: d.collectionId }, e)}
+                    key={s.star.id}
+                    className={`tree-row${p.route.name === "collection" && p.route.id === s.collection.id ? " active" : ""}`}
+                    style={{ "--depth": 0, "--c": s.collection.color ?? "var(--primary)" } as CSSProperties}
+                    onClick={() => p.onNavigate({ name: "collection", id: s.collection.id })}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      p.onCollectionMenu(s.collection, e);
+                    }}
                   >
                     <span className="tree-chevron-space" />
-                    <DocIcon icon={d.icon} color={d.color} starred />
-                    <span className="tree-title">{d.title || t("untitled")}</span>
+                    <span className="tree-icon">
+                      <EntityIcon icon={s.collection.icon} color={s.collection.color} size={18} fallback={<span className="collection-dot" />} />
+                    </span>
+                    <span className="tree-title">{s.collection.name}</span>
                   </button>
-                ))}
+                ) : (
+                  <button
+                    key={s.star.id}
+                    className={`tree-row${isActive(s.doc.id) ? " active" : ""}`}
+                    style={{ "--depth": 0 } as CSSProperties}
+                    onClick={() => p.onNavigate({ name: "doc", id: s.doc.id })}
+                    onContextMenu={(e) => s.doc.collectionId && p.onContextMenu({ id: s.doc.id, title: s.doc.title, url: s.doc.url, collectionId: s.doc.collectionId }, e)}
+                  >
+                    <span className="tree-chevron-space" />
+                    <DocIcon icon={s.doc.icon} color={s.doc.color} starred />
+                    <span className="tree-title">{s.doc.title || t("untitled")}</span>
+                  </button>
+                ),
+              )}
           </section>
         )}
         <section className="tree-group">

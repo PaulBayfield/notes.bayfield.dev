@@ -558,7 +558,8 @@ textarea:disabled {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  width: 248px;
+  position: relative;
+  width: var(--sidebar-w, 248px);
   flex: none;
   display: flex;
   flex-direction: column;

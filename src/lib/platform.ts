@@ -32,3 +32,9 @@ export async function saveTextFile(name: string, contents: string, type = "text/
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   return true;
 }
+
+/** Desktop: asks for files with the system dialog. Returns their paths (empty if cancelled). */
+export async function pickFiles(images: boolean): Promise<string[]> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string[]>("pick_files", { images });
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { EditorView } from "prosemirror-view";
-import { AuthError, createDocument, moveCollection, moveDocument, publishDocument, type Doc } from "./lib/api";
+import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isTauri } from "./lib/platform";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
@@ -10,6 +10,7 @@ import { MOBILE_QUERY, useMediaQuery } from "./lib/useMediaQuery";
 import { useWorkspace } from "./lib/workspace";
 import type { EditorStatus, Heading } from "./editor/Editor";
 import type { PresenceUser } from "./editor/collab";
+import { OPEN_COLLECTION_EVENT } from "./editor/nodeviews";
 import { Sidebar, type DocTarget, type DropTarget } from "./components/Sidebar";
 import { DropdownMenu, PublishButton, Toolbar, type Crumb } from "./components/Toolbar";
 import { useDocumentActions } from "./components/DocumentActions";
@@ -17,12 +18,14 @@ import type { MenuEntry } from "./components/Menu";
 import { DocumentView, type DocMeta } from "./components/DocumentView";
 import { CollectionView, Home } from "./components/Home";
 import { SearchDialog } from "./components/SearchDialog";
-import { SettingsDialog } from "./components/SettingsDialog";
+import { SettingsDialog, type SettingsPage } from "./components/SettingsDialog";
 import { Panel, type PanelTab } from "./components/Panel";
 import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
 import { ShareButton } from "./components/ShareButton";
+import { DatePickerHost } from "./components/DatePicker";
+import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 
 export default function App() {
   return (
@@ -70,6 +73,8 @@ function Root() {
   return (
     <NotesApp
       session={session}
+      onUserChange={(patch) => setSession((s) => s && { ...s, user: { ...s.user, ...patch } })}
+      onTeamChange={(team) => setSession((s) => s && { ...s, team })}
       onSignedOut={() => {
         setSession(null);
         setStatus("signedOut");
@@ -79,7 +84,17 @@ function Root() {
 }
 
 
-function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () => void }) {
+function NotesApp({
+  session,
+  onSignedOut,
+  onUserChange,
+  onTeamChange,
+}: {
+  session: Session;
+  onSignedOut: () => void;
+  onUserChange: (patch: Partial<User>) => void;
+  onTeamChange: (team: Team) => void;
+}) {
   const { t, settings, update } = useSettings();
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
@@ -87,12 +102,14 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** The open settings page, if any. */
+  const [settingsOpen, setSettingsOpen] = useState<SettingsPage | true | false>(false);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [docStatus, setDocStatus] = useState<EditorStatus | undefined>();
   const [presence, setPresence] = useState<PresenceUser[]>([]);
+  const [collaborators, setCollaborators] = useState<User[]>([]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [token, setToken] = useState(session.collaborationToken ?? "");
   const [freshDocId, setFreshDocId] = useState<string | null>(null);
@@ -101,6 +118,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
   const [activeComment, setActiveComment] = useState<string | null>(null);
   const [docTick, setDocTick] = useState(0);
   const viewRef = useRef<EditorView | null>(null);
+  /** A comment to show once its page opens (from a notification). */
+  const pendingComment = useRef<string | null>(null);
 
   const onError = useCallback(
     (e: unknown) => {
@@ -126,6 +145,19 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
     [navigate, mobile],
   );
 
+  // People who have edited the open page, for the header (hidden when insights are off, as in Outline).
+  const collaboratorKey = meta && meta.doc.insightsEnabled !== false ? (meta.doc.collaboratorIds ?? []).join(",") : "";
+  useEffect(() => {
+    if (!collaboratorKey) return setCollaborators([]);
+    let cancelled = false;
+    usersByIds(collaboratorKey.split(","))
+      .then((users) => !cancelled && setCollaborators(users))
+      .catch(() => !cancelled && setCollaborators([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [collaboratorKey]);
+
   // Remember where we were, and reset per-document state when leaving a document.
   useEffect(() => {
     if (isTauri) update({ lastPath: routePath(route) });
@@ -136,9 +168,25 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
       setHeadings([]);
     }
     setDraftComment(null);
-    setActiveComment(null);
+    setActiveComment(pendingComment.current);
+    if (pendingComment.current) {
+      setPanelTab("comments");
+      update({ panel: true });
+    }
+    pendingComment.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route]);
+
+  const openComment = (documentId: string, commentId: string) => {
+    if (route.name === "doc" && meta?.doc.id === documentId) {
+      setActiveComment(commentId);
+      setPanelTab("comments");
+      update({ panel: true });
+      return;
+    }
+    pendingComment.current = commentId;
+    go({ name: "doc", id: documentId });
+  };
 
   const refreshToken = useCallback(async () => {
     const next = await refreshCollaborationToken();
@@ -214,6 +262,7 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
 
   const actions = useDocumentActions({
     workspace,
+    me: session.user,
     meta,
     viewRef,
     go,
@@ -317,7 +366,16 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
     };
   }, [router]);
 
+  // Collection mentions in documents open the collection here.
+  useEffect(() => {
+    const open = (e: Event) => go({ name: "collection", id: String((e as CustomEvent).detail) });
+    window.addEventListener(OPEN_COLLECTION_EVENT, open);
+    return () => window.removeEventListener(OPEN_COLLECTION_EVENT, open);
+  }, [go]);
+
   // ---------- Layout ----------
+
+  const routeCollection = route.name === "collection" ? workspace.collections.find((x) => x.id === route.id || x.urlId === route.id) : undefined;
 
   const crumbs: Crumb[] = useMemo(() => {
     if (route.name === "home") return [{ label: t("home") }];
@@ -337,6 +395,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
     return [...(wide ? out : out.slice(-1)), { label: meta.doc.title || t("untitled") }];
   }, [route, meta, located, workspace.collections, t, go, wide]);
 
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+
   const doSignOut = () => {
     clearTray();
     void signOut().finally(onSignedOut);
@@ -348,6 +408,7 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
       {(mobile ? drawerOpen : settings.sidebar) && (
         <Sidebar
           workspace={workspace}
+          meId={session.user.id}
           route={route}
           activeDocId={meta?.doc.id}
           onNavigate={go}
@@ -358,6 +419,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           onMove={(id, target) => void moveDoc(id, target)}
           onMoveCollection={(id, index) => void reorderCollection(id, index)}
           onNewCollection={actions.newCollection}
+          team={session.team}
+          onOpenWorkspace={() => setSettingsOpen("details")}
           onCollectionMenu={(c, e) => setMenu({ x: e.clientX, y: e.clientY, items: actions.collectionMenu(c) })}
         />
       )}
@@ -372,8 +435,10 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           onForward={router.forward}
           status={route.name === "doc" ? docStatus : undefined}
           presence={presence}
-          starred={meta ? !!actions.isStarred(meta.doc.id) : undefined}
-          onToggleStar={meta ? () => actions.toggleStar(meta.doc.id) : undefined}
+          collaborators={route.name === "doc" ? collaborators : []}
+          documentId={route.name === "doc" ? meta?.doc.id : undefined}
+          starred={meta ? !!actions.isStarred(meta.doc.id) : routeCollection ? !!actions.isCollectionStarred(routeCollection.id) : undefined}
+          onToggleStar={meta ? () => actions.toggleStar(meta.doc.id) : routeCollection ? () => actions.toggleCollectionStar(routeCollection.id) : undefined}
           docMenu={meta?.doc.collectionId ? <DropdownMenu title={t("more")} items={actions.docMenu()} /> : undefined}
           share={
             meta ? (
@@ -411,6 +476,15 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           panelVisible={panelVisible}
           onTogglePanel={togglePanel}
           onOpenSettings={() => setSettingsOpen(true)}
+          notifications={
+            <NotificationsButton
+              badge={(session.user.preferences?.notificationBadge as BadgeStyle | undefined) ?? "count"}
+              collectionName={(id) => workspace.collections.find((c) => c.id === id)?.name}
+              onNavigate={go}
+              onOpenComment={openComment}
+              onError={onError}
+            />
+          }
           onSignOut={doSignOut}
         />
         {error && (
@@ -509,7 +583,22 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           onClose={() => setSearchOpen(false)}
         />
       )}
-      {settingsOpen && <SettingsDialog user={session.user} server={session.server} onClose={() => setSettingsOpen(false)} onSignOut={doSignOut} />}
+      {settingsOpen && (
+        <SettingsDialog
+          user={session.user}
+          server={session.server}
+          workspace={workspace}
+          onClose={closeSettings}
+          onSignOut={doSignOut}
+          page={settingsOpen === true ? undefined : settingsOpen}
+          onUserChange={onUserChange}
+          onTeamChange={onTeamChange}
+          onNavigate={go}
+          flash={flash}
+          onError={onError}
+        />
+      )}
+      <DatePickerHost />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {actions.overlay}
       {toast && (

@@ -6,12 +6,19 @@ import { apiBase, isTauri } from "./platform";
 import { EDITOR_VERSION } from "../editor/schema";
 import { demoCall, isDemo } from "./demo";
 
+export type UserRole = "admin" | "member" | "viewer" | "guest";
+
 export interface User {
   id: string;
   name: string;
   avatarUrl: string | null;
   color: string;
   email?: string;
+  role?: UserRole;
+  /** Only on the signed-in user. */
+  language?: string;
+  preferences?: Record<string, unknown> | null;
+  notificationSettings?: Record<string, boolean | Record<string, boolean>> | null;
 }
 
 export interface Team {
@@ -19,6 +26,18 @@ export interface Team {
   name: string;
   avatarUrl: string | null;
   url: string;
+  description?: string | null;
+  sharing?: boolean;
+  memberCollectionCreate?: boolean;
+  memberTeamCreate?: boolean;
+  defaultCollectionId?: string | null;
+  documentEmbeds?: boolean;
+  guestSignin?: boolean;
+  passkeysEnabled?: boolean;
+  defaultUserRole?: UserRole;
+  inviteRequired?: boolean;
+  allowedDomains?: string[];
+  preferences?: Record<string, unknown> | null;
 }
 
 export interface Collection {
@@ -61,6 +80,8 @@ export interface Doc {
   preferences?: { headingPrefix?: string } | null;
   createdBy?: User;
   updatedBy?: User;
+  /** People who have edited the document. */
+  collaboratorIds?: string[];
   revision?: number;
   text?: string;
 }
@@ -133,6 +154,12 @@ export async function ensureCsrfCookie() {
   await fetch("/robots.txt", { credentials: "same-origin" }).catch(() => {});
 }
 
+/** Web only: the header Outline wants on cookie-authenticated writes. */
+function csrfHeader(): Record<string, string> {
+  const csrf = readCookie("__Host-csrfToken") ?? readCookie("csrfToken");
+  return csrf ? { "x-csrf-token": decodeURIComponent(csrf) } : {};
+}
+
 export async function call<T>(method: string, body: object = {}): Promise<Envelope<T>> {
   if (isDemo) {
     try {
@@ -146,10 +173,7 @@ export async function call<T>(method: string, body: object = {}): Promise<Envelo
     accept: "application/json",
     "x-editor-version": EDITOR_VERSION,
   };
-  if (!isTauri) {
-    const csrf = readCookie("__Host-csrfToken") ?? readCookie("csrfToken");
-    if (csrf) headers["x-csrf-token"] = decodeURIComponent(csrf);
-  }
+  if (!isTauri) Object.assign(headers, csrfHeader());
   let res: Response;
   try {
     res = await fetch(`${apiBase}/api/${method}`, {
@@ -235,36 +259,86 @@ export const duplicateDocument = (id: string) => call<{ documents: Doc[] }>("doc
 export const listUsers = (query: string, limit = 8) =>
   call<User[]>("users.list", { query, limit, filter: "active" }).then((r) => r.data);
 
+export const usersByIds = (ids: string[]) => call<User[]>("users.list", { ids, limit: 100 }).then((r) => r.data);
+
+export interface Attachment {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+  contentType: string;
+}
+
+/** Outline's kinds of upload: files in documents, profile pictures and logos, custom emojis. */
+export type AttachmentPreset = "documentAttachment" | "avatar" | "emoji";
+
 /** Uploads a file as an attachment of a document; returns the URL to put in the document. */
-export async function uploadAttachment(documentId: string, file: File): Promise<{ url: string; id: string; name: string; size: number }> {
+export const uploadAttachment = (documentId: string, file: File) => uploadFile(file, "documentAttachment", documentId);
+
+/** Uploads a file to Outline's storage. Only document attachments belong to a document. */
+export async function uploadFile(file: File, preset: AttachmentPreset, documentId?: string): Promise<Attachment> {
+  const contentType = file.type || "application/octet-stream";
+  if (isTauri) {
+    // The desktop app uploads from Rust: WebView2 drops file bodies sent to the notes:// proxy.
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<Attachment>("upload_bytes", new Uint8Array(await file.arrayBuffer()), {
+      headers: { "x-document-id": documentId ?? "", "x-preset": preset, "x-file-name": encodeURIComponent(file.name || "file"), "x-content-type": file.type },
+    });
+  }
   const res = await call<{
-    mode?: "post" | "put";
-    uploadUrl?: string;
-    url?: string;
+    uploadUrl: string;
     form?: Record<string, string>;
-    headers?: Record<string, string>;
     attachment: { id: string; url: string; name: string; size: number };
   }>("attachments.create", {
     documentId,
     name: file.name || "file",
-    contentType: file.type || "application/octet-stream",
+    contentType,
     size: file.size,
-    preset: "documentAttachment",
+    preset,
   });
   const data = res.data;
-  if (data.mode === "put" && data.url) {
-    const put = await fetch(data.url, { method: "PUT", headers: data.headers, body: file });
-    if (!put.ok) throw new ApiError("Upload failed", put.status);
-  } else {
-    const form = new FormData();
-    for (const [k, v] of Object.entries(data.form ?? {})) form.append(k, v);
-    form.append("file", file);
-    // Local storage uploads to /api/files.create (proxied with the session); S3 to its own URL.
-    const target = data.uploadUrl?.startsWith("/") ? `${apiBase}${data.uploadUrl}` : data.uploadUrl!;
-    const post = await fetch(target, { method: "POST", body: form, credentials: "same-origin" });
-    if (!post.ok) throw new ApiError("Upload failed", post.status);
+  const form = new FormData();
+  for (const [k, v] of Object.entries(data.form ?? {})) form.append(k, v);
+  form.append("file", file);
+  // Local storage uploads to /api/files.create with the session (and its CSRF token); S3 to its own URL.
+  const local = data.uploadUrl.startsWith("/");
+  const post = await fetch(data.uploadUrl, {
+    method: "POST",
+    body: form,
+    headers: local ? csrfHeader() : undefined,
+    credentials: local ? "same-origin" : "omit",
+  }).catch(() => {
+    throw new ApiError("Couldn't reach the server. Check your connection.", 0);
+  });
+  if (!post.ok) {
+    const json = await post.json().catch(() => null);
+    throw new ApiError(json?.message || `Upload failed (${post.status})`, post.status);
   }
-  return data.attachment;
+  return { ...data.attachment, contentType };
+}
+
+/** Asks for an image (the system dialog on desktop) and uploads it. Null if cancelled. */
+export async function chooseAndUploadImage(preset: AttachmentPreset): Promise<Attachment | null> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const [path] = await invoke<string[]>("pick_files", { images: true });
+    return path ? invoke<Attachment>("upload_file", { path, preset }) : null;
+  }
+  const file = await new Promise<File | null>((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+  return file ? uploadFile(file, preset) : null;
+}
+
+/** Desktop: uploads a file picked with `pickFiles`, by path. */
+export async function uploadAttachmentFromPath(documentId: string, path: string): Promise<Attachment> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<Attachment>("upload_file", { documentId, path });
 }
 
 // ---------- URLs ----------
@@ -441,8 +515,21 @@ export interface View {
 
 export const listViews = (documentId: string) => call<View[]>("views.list", { documentId }).then((r) => r.data);
 
+const activityCache = new Map<string, { at: number; pending: Promise<{ views: View[]; revisions: Revision[] }> }>();
+
+/** Who viewed and edited a document, shared by the header's hover cards for half a minute. */
+export function documentActivity(documentId: string) {
+  const hit = activityCache.get(documentId);
+  if (hit && Date.now() - hit.at < 30_000) return hit.pending;
+  const pending = Promise.all([listViews(documentId).catch(() => [] as View[]), listRevisions(documentId).catch(() => [] as Revision[])]).then(
+    ([views, revisions]) => ({ views, revisions }),
+  );
+  activityCache.set(documentId, { at: Date.now(), pending });
+  return pending;
+}
+
 export interface UserDetails extends User {
-  role?: string;
+  role?: UserRole;
   timezone?: string | null;
   lastActiveAt?: string | null;
 }
@@ -510,10 +597,54 @@ export interface Membership {
 export const documentMemberships = (id: string) =>
   call<{ memberships: Membership[]; users: User[] }>("documents.memberships", { id, limit: 100 }).then((r) => r.data);
 
+/** Everyone who can open a document: its own members plus the collection's. */
+export const documentUsers = (id: string) => call<User[]>("documents.users", { id, limit: 100 }).then((r) => r.data);
+
 /** Adds someone to a document, or changes their permission. */
 export const addDocumentUser = (id: string, userId: string, permission: DocumentPermission) => call("documents.add_user", { id, userId, permission });
 
 export const removeDocumentUser = (id: string, userId: string) => call("documents.remove_user", { id, userId });
+
+export interface Group {
+  id: string;
+  name: string;
+  memberCount: number;
+}
+
+export interface GroupMembership {
+  id: string;
+  groupId: string;
+  documentId: string;
+  permission: DocumentPermission;
+}
+
+export const listGroups = (query: string, limit = 8) =>
+  call<{ groups: Group[] }>("groups.list", { query, limit }).then((r) => r.data.groups);
+
+/** Groups explicitly added to a document. */
+export const documentGroupMemberships = (id: string) =>
+  call<{ groupMemberships: GroupMembership[]; groups: Group[] }>("documents.group_memberships", { id, limit: 100 }).then((r) => r.data);
+
+/** Adds a group to a document, or changes its permission. */
+export const addDocumentGroup = (id: string, groupId: string, permission: DocumentPermission) => call("documents.add_group", { id, groupId, permission });
+
+export const removeDocumentGroup = (id: string, groupId: string) => call("documents.remove_group", { id, groupId });
+
+/**
+ * Pages shared with me, directly or through one of my groups (Outline's "Shared with me"),
+ * in the order Outline keeps them.
+ */
+export async function listSharedWithMe(): Promise<Doc[]> {
+  const [mine, viaGroups] = await Promise.all([
+    call<{ memberships: Membership[]; documents: Doc[] }>("userMemberships.list", { limit: 100 }).then((r) => r.data),
+    call<{ groupMemberships: GroupMembership[]; documents: Doc[] }>("groupMemberships.list", { limit: 100 })
+      .then((r) => r.data)
+      .catch(() => ({ groupMemberships: [] as GroupMembership[], documents: [] as Doc[] })),
+  ]);
+  const ordered = [...mine.memberships.map((m) => m.documentId), ...viaGroups.groupMemberships.map((m) => m.documentId)];
+  const docs = new Map([...viaGroups.documents, ...mine.documents].map((d) => [d.id, d]));
+  return [...new Set(ordered)].flatMap((id) => docs.get(id) ?? []);
+}
 
 export interface Share {
   id: string;
@@ -541,3 +672,152 @@ export const createShare = (documentId: string) => call<Share>("shares.create", 
 
 export const updateShare = (id: string, patch: { published?: boolean; includeChildDocuments?: boolean; allowIndexing?: boolean }) =>
   call<Share>("shares.update", { id, ...patch }).then((r) => r.data);
+
+export const revokeShare = (id: string) => call("shares.revoke", { id });
+
+export interface ShareListItem extends Share {
+  documentTitle?: string;
+  createdBy?: User;
+  createdAt: string;
+  lastAccessedAt?: string;
+}
+
+/** Every public link in the workspace (admins), or the ones I made. */
+export const listShares = (query = "") =>
+  call<ShareListItem[]>("shares.list", { query: query || undefined, limit: 100, sort: "updatedAt", direction: "DESC" }).then((r) => r.data ?? []);
+
+// ---------- Account ----------
+
+export const updateMe = (patch: { name?: string; avatarUrl?: string | null; language?: string; preferences?: Record<string, unknown> }) =>
+  call<User>("users.update", patch).then((r) => r.data);
+
+/** Turns one kind of notification email on or off; without an event, all of them. */
+export const setNotification = (on: boolean, eventType?: string) =>
+  call(on ? "users.notificationsSubscribe" : "users.notificationsUnsubscribe", eventType ? { eventType } : {});
+
+// ---------- Notifications ----------
+
+export interface AppNotification {
+  id: string;
+  event: string;
+  createdAt: string;
+  viewedAt: string | null;
+  archivedAt: string | null;
+  actor?: User;
+  documentId: string | null;
+  document?: Doc;
+  commentId: string | null;
+  collectionId: string | null;
+  groupId: string | null;
+  group?: { id: string; name: string };
+  data?: { emoji?: string } | null;
+}
+
+/** The latest notifications, and how many are unread in all. */
+export const listNotifications = (limit = 25) =>
+  call<{ notifications: AppNotification[]; unseen: number }>("notifications.list", { limit, archived: false }).then((r) => ({
+    notifications: r.data?.notifications ?? [],
+    unseen: r.data?.unseen ?? 0,
+  }));
+
+export const markNotificationRead = (id: string) => call("notifications.update", { id, viewedAt: new Date().toISOString() });
+
+export const markAllNotificationsRead = () => call("notifications.update_all", { viewedAt: new Date().toISOString() });
+
+export const archiveNotification = (id: string) => call("notifications.update", { id, archivedAt: new Date().toISOString() });
+
+// ---------- Workspace ----------
+
+export const updateTeam = (patch: Partial<Omit<Team, "id" | "url">>) => call<Team>("teams.update", patch).then((r) => r.data);
+
+export interface Member extends UserDetails {
+  email?: string;
+  isSuspended?: boolean;
+  createdAt?: string;
+}
+
+export type MemberFilter = "all" | "active" | "admins" | "members" | "viewers" | "invited" | "suspended";
+
+export const listMembers = (query: string, filter: MemberFilter, offset = 0, limit = 50) =>
+  call<Member[]>("users.list", { query: query || undefined, filter, offset, limit, sort: "name", direction: "ASC" });
+
+export const setUserRole = (id: string, role: UserRole) => call<Member>("users.update_role", { id, role }).then((r) => r.data);
+
+export const suspendUser = (id: string) => call<Member>("users.suspend", { id }).then((r) => r.data);
+
+export const activateUser = (id: string) => call<Member>("users.activate", { id }).then((r) => r.data);
+
+export const resendInvite = (id: string) => call("users.resendInvite", { id });
+
+export const inviteUsers = (invites: { email: string; name: string; role: UserRole }[]) => call("users.invite", { invites });
+
+export interface GroupDetails extends Group {
+  description?: string | null;
+}
+
+export const listAllGroups = () => call<{ groups: GroupDetails[] }>("groups.list", { limit: 100, sort: "name", direction: "ASC" });
+
+export const createGroup = (name: string) => call<GroupDetails>("groups.create", { name }).then((r) => r.data);
+
+export const updateGroup = (id: string, patch: { name?: string; description?: string }) => call<GroupDetails>("groups.update", { id, ...patch }).then((r) => r.data);
+
+export const deleteGroup = (id: string) => call("groups.delete", { id });
+
+export type GroupPermission = "admin" | "member";
+
+export const groupMembers = (id: string) =>
+  call<{ groupMemberships: { userId: string; permission: GroupPermission }[]; users: User[] }>("groups.memberships", { id, limit: 100 }).then((r) => r.data);
+
+export const addGroupUser = (id: string, userId: string) => call("groups.add_user", { id, userId });
+
+export const removeGroupUser = (id: string, userId: string) => call("groups.remove_user", { id, userId });
+
+export interface Template {
+  id: string;
+  title: string;
+  icon: string | null;
+  color: string | null;
+  collectionId: string | null;
+  updatedAt: string;
+  updatedBy?: User;
+  data?: RichText;
+  /** Older servers keep templates as documents, edited like any page. */
+  legacy?: boolean;
+}
+
+/** Templates, from Outline's templates API, or from documents on servers that predate it. */
+export async function listTemplates(): Promise<Envelope<Template[]>> {
+  try {
+    const res = await call<Template[]>("templates.list", { limit: 100, sort: "updatedAt", direction: "DESC" });
+    return { ...res, data: res.data ?? [] };
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) throw e;
+    const res = await call<Doc[]>("documents.list", { template: true, limit: 100, sort: "updatedAt", direction: "DESC" });
+    return { ...res, data: res.data.map((d) => ({ ...d, legacy: true })) };
+  }
+}
+
+export const templateInfo = (id: string) => call<Template>("templates.info", { id });
+
+export const createTemplate = (input: { title: string; collectionId?: string }) => call<Template>("templates.create", { ...input, publish: true }).then((r) => r.data);
+
+export const updateTemplate = (id: string, patch: { title?: string; data?: RichText; collectionId?: string | null }) =>
+  call<Template>("templates.update", { id, ...patch }).then((r) => r.data);
+
+export const duplicateTemplate = (id: string) => call<Template>("templates.duplicate", { id }).then((r) => r.data);
+
+export const deleteTemplate = (id: string, legacy?: boolean) => call(legacy ? "documents.delete" : "templates.delete", { id });
+
+export interface CustomEmoji {
+  id: string;
+  name: string;
+  url: string;
+  createdBy?: User;
+  createdAt: string;
+}
+
+export const listEmojis = () => call<CustomEmoji[]>("emojis.list", { limit: 100 });
+
+export const createEmoji = (name: string, attachmentId: string) => call<CustomEmoji>("emojis.create", { name, attachmentId }).then((r) => r.data);
+
+export const deleteEmoji = (id: string) => call("emojis.delete", { id });

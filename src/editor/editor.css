@@ -22,10 +22,45 @@
   --font-body: "JetBrains Mono", "Cascadia Code", "SF Mono", Consolas, monospace;
   font-size: 0.94em;
 }
+.doc {
+  position: relative;
+}
 .doc-icon {
+  display: block;
   font-size: 2.6em;
   line-height: 1;
   margin-bottom: 12px;
+}
+button.doc-icon {
+  margin-left: -6px;
+  padding: 6px;
+  border-radius: 10px;
+}
+button.doc-icon:hover {
+  background: var(--hover);
+}
+/* Sits in the top padding, shown while hovering the page. */
+.doc-add-icon {
+  position: absolute;
+  top: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.doc:hover .doc-add-icon,
+.doc-add-icon:focus-visible {
+  opacity: 1;
+}
+.doc-add-icon:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 .doc-title {
   display: block;
@@ -795,4 +830,51 @@
 .doc-content .mermaid-diagram.error .mermaid-error {
   white-space: pre;
   text-align: left;
+}
+
+/* Mention menu sections and dates */
+.suggest-menu .menu-section {
+  flex: none;
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.suggest-menu .menu-section:first-child {
+  padding-top: 4px;
+}
+.suggest-menu .menu-hint {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.suggest-menu .collection-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--c);
+}
+.doc-content .mention-date {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.doc-content .mention-date svg {
+  flex: none;
+  color: var(--text-muted);
+}
+.doc-content .mention-date:hover {
+  background: var(--active);
+}
+.ProseMirror:not([contenteditable="true"]) .mention-date {
+  cursor: default;
+}
+.doc-content .mention-group {
+  cursor: default;
 }

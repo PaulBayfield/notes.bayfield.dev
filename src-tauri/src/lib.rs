@@ -293,16 +293,225 @@ fn handle_args(app: &AppHandle, args: &[String]) {
 
 // ---------- Files ----------
 
+/// Runs `f` on the UI thread and waits for its result.
+#[cfg(windows)]
+fn on_main_thread<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(f());
+    })
+    .ok()?;
+    rx.recv().ok()
+}
+
+/// Shows a system dialog with the mouse pointer visible.
+///
+/// Windows hides the pointer while you type in the webview, and the dialog runs on the same UI
+/// thread, so one opened from the keyboard (the editor's /image command) kept it hidden: the
+/// pointer was invisible over the dialog. It's shown for the dialog, then put back as it was.
+fn with_visible_cursor<T>(app: &AppHandle, show: impl FnOnce() -> T) -> T {
+    #[cfg(windows)]
+    let shown = on_main_thread(app, || {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{LoadCursorW, SetCursor, ShowCursor, IDC_ARROW};
+        let mut shown = 0;
+        // ShowCursor counts: the pointer shows once the count is back at zero or more.
+        while shown < 32 {
+            shown += 1;
+            if unsafe { ShowCursor(1) } >= 0 {
+                break;
+            }
+        }
+        unsafe { SetCursor(LoadCursorW(std::ptr::null_mut(), IDC_ARROW)) };
+        shown
+    })
+    .unwrap_or(0);
+    #[cfg(not(windows))]
+    let _ = app;
+    let out = show();
+    #[cfg(windows)]
+    on_main_thread(app, move || {
+        for _ in 0..shown {
+            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::ShowCursor(0) };
+        }
+    });
+    out
+}
+
 /// Asks where to save a file, then writes it. Returns false if the user cancelled.
 #[tauri::command]
 async fn save_file(app: AppHandle, name: String, contents: String) -> Result<bool, String> {
     use tauri_plugin_dialog::DialogExt;
-    let Some(path) = app.dialog().file().set_file_name(&name).blocking_save_file() else {
+    let dialog = app.dialog().file().set_file_name(&name);
+    let Some(path) = with_visible_cursor(&app, || dialog.blocking_save_file()) else {
         return Ok(false);
     };
     let path = path.into_path().map_err(err)?;
     std::fs::write(path, contents).map_err(err)?;
     Ok(true)
+}
+
+/// Asks for files to attach. Returns their paths (empty if cancelled).
+///
+/// The webview's own file picker isn't used: in this frameless window it can open out of sight
+/// and leave the app waiting on it.
+#[tauri::command]
+async fn pick_files(app: AppHandle, images: bool) -> Vec<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut dialog = app.dialog().file();
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    if images {
+        dialog = dialog.add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico"]);
+    }
+    with_visible_cursor(&app, || dialog.blocking_pick_files())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| p.into_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Attachment {
+    id: String,
+    url: String,
+    name: String,
+    size: u64,
+    content_type: String,
+}
+
+fn content_type_of(name: &str) -> &'static str {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "avif" => "image/avif",
+        "ico" => "image/x-icon",
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        "md" => "text/markdown",
+        "csv" => "text/csv",
+        "json" => "application/json",
+        "zip" => "application/zip",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Creates an attachment and uploads its contents, the way Outline's editor does. `preset` is
+/// Outline's attachment kind ("documentAttachment", "avatar", "emoji"); only document
+/// attachments belong to a document.
+///
+/// Done here rather than with `fetch` through the `notes://` protocol because WebView2 doesn't
+/// pass file bodies (multipart forms) on to custom protocols, so uploads arrived empty.
+async fn upload(state: &AppState, document_id: &str, preset: &str, name: &str, content_type: &str, bytes: Vec<u8>) -> Result<Attachment, String> {
+    let session = state.session.read().map_err(err)?.clone().ok_or("Signed out")?;
+    let size = bytes.len() as u64;
+    let mut body = serde_json::json!({
+        "name": name,
+        "contentType": content_type,
+        "size": size,
+        "preset": if preset.is_empty() { "documentAttachment" } else { preset },
+    });
+    if !document_id.is_empty() {
+        body["documentId"] = document_id.into();
+    }
+    let res = state
+        .client
+        .post(format!("{}/api/attachments.create", session.server))
+        .bearer_auth(&session.token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach the server: {e}"))?;
+    let status = res.status();
+    let body: serde_json::Value = res.json().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("Upload failed ({status})")));
+    }
+    let data = &body["data"];
+    let upload_url = data["uploadUrl"].as_str().ok_or("The server didn't say where to upload the file")?;
+    // Local storage: an API path on the server, which needs the session. S3 and the like: a signed URL.
+    let (target, ours) = if upload_url.starts_with('/') {
+        (format!("{}{upload_url}", session.server), true)
+    } else {
+        (upload_url.to_owned(), upload_url.starts_with(&format!("{}/", session.server)))
+    };
+
+    let mut form = reqwest::multipart::Form::new();
+    if let Some(fields) = data["form"].as_object() {
+        for (key, value) in fields {
+            let value = value.as_str().map(str::to_owned).unwrap_or_else(|| value.to_string());
+            form = form.text(key.clone(), value);
+        }
+    }
+    let part = reqwest::multipart::Part::bytes(bytes).file_name(name.to_owned());
+    let part = match part.mime_str(content_type) {
+        Ok(p) => p,
+        Err(_) => return Err("Unsupported file type".into()),
+    };
+    // The file goes last: S3 ignores fields after it.
+    form = form.part("file", part);
+    let mut req = state.client.post(target).multipart(form);
+    if ours {
+        req = req.bearer_auth(&session.token);
+    }
+    let res = req.send().await.map_err(|e| format!("Upload failed: {e}"))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let body: serde_json::Value = res.json().await.unwrap_or_default();
+        return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("Upload failed ({status})")));
+    }
+
+    let a = &data["attachment"];
+    let text = |v: &serde_json::Value| v.as_str().unwrap_or_default().to_owned();
+    Ok(Attachment {
+        id: text(&a["id"]),
+        url: text(&a["url"]),
+        name: a["name"].as_str().unwrap_or(name).to_owned(),
+        size: a["size"].as_u64().unwrap_or(size),
+        content_type: content_type.to_owned(),
+    })
+}
+
+/// Uploads a file picked with `pick_files`.
+#[tauri::command]
+async fn upload_file(state: tauri::State<'_, AppState>, document_id: Option<String>, path: String, preset: Option<String>) -> Result<Attachment, String> {
+    let path = std::path::PathBuf::from(path);
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
+    let bytes = tokio::fs::read(&path).await.map_err(|e| format!("Couldn't read {name}: {e}"))?;
+    let document_id = document_id.unwrap_or_default();
+    upload(&state, &document_id, preset.as_deref().unwrap_or_default(), &name, content_type_of(&name), bytes).await
+}
+
+/// Uploads a pasted, dropped or chosen file. The body is its raw bytes; `x-document-id`,
+/// `x-preset`, `x-file-name` (URI-encoded) and `x-content-type` describe it.
+#[tauri::command]
+async fn upload_bytes(state: tauri::State<'_, AppState>, request: tauri::ipc::Request<'_>) -> Result<Attachment, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected the file's contents".into());
+    };
+    let header = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok()).unwrap_or_default().to_owned();
+    let document_id = header("x-document-id");
+    let name = url::form_urlencoded::parse(format!("n={}", header("x-file-name")).as_bytes())
+        .next()
+        .map(|(_, v)| v.into_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "file".into());
+    let given = header("x-content-type");
+    let content_type = if given.is_empty() { content_type_of(&name).to_owned() } else { given };
+    let bytes = bytes.clone();
+    upload(&state, &document_id, &header("x-preset"), &name, &content_type, bytes).await
 }
 
 // ---------- API proxy (notes:// protocol) ----------
@@ -419,6 +628,9 @@ pub fn run() {
             sign_in_with_browser,
             sign_out,
             save_file,
+            pick_files,
+            upload_file,
+            upload_bytes,
             shell::set_close_to_tray,
             shell::set_start_minimized,
             shell::set_tray_labels,
