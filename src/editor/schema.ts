@@ -9,6 +9,7 @@
 import { Schema, type DOMOutputSpec, type MarkSpec, type Node, type NodeSpec } from "prosemirror-model";
 import { mathSchemaSpec } from "@benrbray/prosemirror-math";
 import { emojiFor } from "./emoji";
+import { dateLong } from "./dates";
 
 /** The editor version sent to Outline; the server refuses clients a major version behind. */
 export const EDITOR_VERSION = "17.0.0";
@@ -57,6 +58,13 @@ function cellFromDOM(dom: HTMLElement) {
 
 const MENTION_LINK_TYPES = new Set(["document", "collection", "url", "issue", "pull_request", "project"]);
 
+/** A mention as text: "@name" for people, the date written out for dates, else the label. */
+function mentionText(node: Node): string {
+  if (node.attrs.type === "user") return `@${node.attrs.label}`;
+  if (node.attrs.type === "date" && typeof node.attrs.modelId === "string") return dateLong(node.attrs.modelId, document.documentElement.lang);
+  return String(node.attrs.label ?? "");
+}
+
 const nodes: Record<string, NodeSpec> = {
   mention: {
     attrs: {
@@ -88,9 +96,9 @@ const nodes: Record<string, NodeSpec> = {
     toDOM: (node) => [
       MENTION_LINK_TYPES.has(node.attrs.type) ? "a" : "span",
       { class: `mention mention-${node.attrs.type}`, "data-type": node.attrs.type, "data-id": node.attrs.modelId },
-      node.attrs.type === "user" ? `@${node.attrs.label}` : String(node.attrs.label ?? ""),
+      mentionText(node),
     ],
-    leafText: (node) => (node.attrs.type === "user" ? `@${node.attrs.label}` : String(node.attrs.label ?? "")),
+    leafText: mentionText,
   },
 
   doc: { content: "block+" },

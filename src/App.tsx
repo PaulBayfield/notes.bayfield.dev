@@ -10,6 +10,7 @@ import { MOBILE_QUERY, useMediaQuery } from "./lib/useMediaQuery";
 import { useWorkspace } from "./lib/workspace";
 import type { EditorStatus, Heading } from "./editor/Editor";
 import type { PresenceUser } from "./editor/collab";
+import { OPEN_COLLECTION_EVENT } from "./editor/nodeviews";
 import { Sidebar, type DocTarget, type DropTarget } from "./components/Sidebar";
 import { DropdownMenu, PublishButton, Toolbar, type Crumb } from "./components/Toolbar";
 import { useDocumentActions } from "./components/DocumentActions";
@@ -363,6 +364,13 @@ function NotesApp({
       window.removeEventListener("mouseup", onMouse);
     };
   }, [router]);
+
+  // Collection mentions in documents open the collection here.
+  useEffect(() => {
+    const open = (e: Event) => go({ name: "collection", id: String((e as CustomEvent).detail) });
+    window.addEventListener(OPEN_COLLECTION_EVENT, open);
+    return () => window.removeEventListener(OPEN_COLLECTION_EVENT, open);
+  }, [go]);
 
   // ---------- Layout ----------
 

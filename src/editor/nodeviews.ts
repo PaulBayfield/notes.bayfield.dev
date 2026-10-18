@@ -7,6 +7,7 @@ import { createMathView } from "@benrbray/prosemirror-math";
 import { resolveUrl } from "../lib/api";
 import { emojiFor, emojiLoaded, loadEmoji } from "./emoji";
 import { CODE_LANGUAGES } from "./codeLanguages";
+import { dateLabel, dateLong, withDay } from "./dates";
 import { pickableLanguages } from "./highlight";
 import { isMermaid, onThemeChange, renderMermaid } from "./mermaid";
 import { TextSelection } from "prosemirror-state";
@@ -324,12 +325,57 @@ function videoView(node: Node): NodeView {
   return { dom: el("div", { class: "video", contenteditable: "false" }, video), ignoreMutation: () => true };
 }
 
-function mentionView(node: Node, hooks: NodeViewHooks): NodeView {
+/** Asks the app to open a collection (mentions of collections link to it). */
+export const OPEN_COLLECTION_EVENT = "notes:open-collection";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function calendarIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  for (const [k, v] of Object.entries({ width: "13", height: "13", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "aria-hidden": "true" }))
+    svg.setAttribute(k, v);
+  svg.innerHTML = '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>';
+  return svg;
+}
+
+/**
+ * A date mention: a badge reading "Today", "Tomorrow", "Fri 23 Oct"… Clicking it opens a date
+ * picker (the browser's own, anchored to the badge) to change the day.
+ */
+function dateMentionView(node: Node, view: EditorView, getPos: () => number | undefined): NodeView {
+  const iso = String(node.attrs.modelId ?? "");
+  const lang = document.documentElement.lang;
+  const input = el("input", { type: "date", tabindex: "-1", "aria-hidden": "true", class: "mention-date-input" });
+  const dom = el("span", { class: "mention mention-date", contenteditable: "false", title: dateLong(iso, lang) }, calendarIcon() as Element as HTMLElement, el("span", {}, dateLabel(iso, lang)), input);
+  dom.addEventListener("mousedown", (e) => {
+    if (!view.editable) return;
+    e.preventDefault();
+    input.value = iso.slice(0, 10);
+    try {
+      input.showPicker();
+    } catch {
+      input.focus();
+    }
+  });
+  input.addEventListener("change", () => {
+    const pos = getPos();
+    if (!input.value || pos === undefined) return;
+    const next = withDay(iso, input.value);
+    if (next !== iso) view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, modelId: next, label: next }));
+    view.focus();
+  });
+  return { dom, ignoreMutation: () => true, stopEvent: (e) => e.target === input };
+}
+
+function mentionView(node: Node, view: EditorView, getPos: () => number | undefined, hooks: NodeViewHooks): NodeView {
   const type = node.attrs.type as string;
+  if (type === "date") return dateMentionView(node, view, getPos);
   const label = type === "user" ? `@${node.attrs.label}` : String(node.attrs.label ?? "");
   const dom = el("span", { class: `mention mention-${type}`, contenteditable: "false" }, label);
   if (type === "document") {
     dom.addEventListener("click", () => hooks.openDocument(node.attrs.modelId));
+  } else if (type === "collection") {
+    dom.addEventListener("click", () => window.dispatchEvent(new CustomEvent(OPEN_COLLECTION_EVENT, { detail: node.attrs.modelId })));
   } else if (node.attrs.href) {
     dom.addEventListener("click", () => hooks.openLink(node.attrs.href));
   }
@@ -347,7 +393,7 @@ export function nodeViews(hooks: NodeViewHooks): Record<string, NodeViewConstruc
     attachment: (node) => attachmentView(node, hooks),
     embed: (node) => embedView(node, hooks),
     video: (node) => videoView(node),
-    mention: (node) => mentionView(node, hooks),
+    mention: (node, view, getPos) => mentionView(node, view, getPos, hooks),
     math_inline: (node, view, getPos) => createMathView(false)(node, view, getPos as () => number) as unknown as NodeView,
     math_block: (node, view, getPos) => createMathView(true)(node, view, getPos as () => number) as unknown as NodeView,
   };

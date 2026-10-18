@@ -524,6 +524,8 @@ const en = {
   sharedBy: "Shared by {name}",
   rename: "Rename",
   shareDocument: "Share “{title}”",
+  mentionPeople: "People",
+  mentionDates: "Date",
 };
 
 export type StringKey = keyof typeof en;
@@ -1048,6 +1050,8 @@ const fr: Record<StringKey, string> = {
   sharedBy: "Partagé par {name}",
   rename: "Renommer",
   shareDocument: "Partager « {title} »",
+  mentionPeople: "Personnes",
+  mentionDates: "Date",
 };
 
 const strings: Record<Lang, Record<StringKey, string>> = { en, fr };
