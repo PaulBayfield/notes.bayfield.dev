@@ -875,16 +875,6 @@ button.doc-icon:hover {
 .ProseMirror:not([contenteditable="true"]) .mention-date {
   cursor: default;
 }
-.mention-date-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  pointer-events: none;
-  border: 0;
-  padding: 0;
-}
 .doc-content .mention-group {
   cursor: default;
 }

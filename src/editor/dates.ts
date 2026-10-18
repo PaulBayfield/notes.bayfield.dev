@@ -3,6 +3,18 @@
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/** Asks the app to show its calendar for a date mention (handled by `DatePickerHost`). */
+export const PICK_DATE_EVENT = "notes:pick-date";
+
+export interface PickDateRequest {
+  /** The badge the calendar opens from. */
+  anchor: HTMLElement;
+  /** "YYYY-MM-DD" */
+  value: string;
+  onPick: (day: string) => void;
+  onClose?: () => void;
+}
+
 /** "2026-10-18", in local time. */
 export function toISODate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

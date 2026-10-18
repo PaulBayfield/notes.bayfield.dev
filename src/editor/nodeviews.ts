@@ -7,7 +7,7 @@ import { createMathView } from "@benrbray/prosemirror-math";
 import { resolveUrl } from "../lib/api";
 import { emojiFor, emojiLoaded, loadEmoji } from "./emoji";
 import { CODE_LANGUAGES } from "./codeLanguages";
-import { dateLabel, dateLong, withDay } from "./dates";
+import { dateLabel, dateLong, PICK_DATE_EVENT, withDay, type PickDateRequest } from "./dates";
 import { pickableLanguages } from "./highlight";
 import { isMermaid, onThemeChange, renderMermaid } from "./mermaid";
 import { TextSelection } from "prosemirror-state";
@@ -345,26 +345,25 @@ function calendarIcon(): SVGSVGElement {
 function dateMentionView(node: Node, view: EditorView, getPos: () => number | undefined): NodeView {
   const iso = String(node.attrs.modelId ?? "");
   const lang = document.documentElement.lang;
-  const input = el("input", { type: "date", tabindex: "-1", "aria-hidden": "true", class: "mention-date-input" });
-  const dom = el("span", { class: "mention mention-date", contenteditable: "false", title: dateLong(iso, lang) }, calendarIcon() as Element as HTMLElement, el("span", {}, dateLabel(iso, lang)), input);
+  const dom = el("span", { class: "mention mention-date", contenteditable: "false", title: dateLong(iso, lang) }, calendarIcon() as Element as HTMLElement, el("span", {}, dateLabel(iso, lang)));
   dom.addEventListener("mousedown", (e) => {
     if (!view.editable) return;
     e.preventDefault();
-    input.value = iso.slice(0, 10);
-    try {
-      input.showPicker();
-    } catch {
-      input.focus();
-    }
+    dom.classList.add("open");
+    const request: PickDateRequest = {
+      anchor: dom,
+      value: iso.slice(0, 10),
+      onPick: (day) => {
+        const pos = getPos();
+        const next = withDay(iso, day);
+        if (pos !== undefined && next !== iso) view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, modelId: next, label: next }));
+        view.focus();
+      },
+      onClose: () => dom.classList.remove("open"),
+    };
+    window.dispatchEvent(new CustomEvent(PICK_DATE_EVENT, { detail: request }));
   });
-  input.addEventListener("change", () => {
-    const pos = getPos();
-    if (!input.value || pos === undefined) return;
-    const next = withDay(iso, input.value);
-    if (next !== iso) view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, modelId: next, label: next }));
-    view.focus();
-  });
-  return { dom, ignoreMutation: () => true, stopEvent: (e) => e.target === input };
+  return { dom, ignoreMutation: () => true };
 }
 
 function mentionView(node: Node, view: EditorView, getPos: () => number | undefined, hooks: NodeViewHooks): NodeView {

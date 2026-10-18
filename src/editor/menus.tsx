@@ -4,7 +4,7 @@ import { TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { setBlockType, toggleMark } from "prosemirror-commands";
 import { addColumnAfter, addRowAfter, CellSelection, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
-import { listCollections, listGroups, listUsers, searchTitles, type Collection, type Group, type User } from "../lib/api";
+import { listCollections, listGroups, listUsers, recentlyViewed, searchTitles, type Collection, type Group, type User } from "../lib/api";
 import { EntityIcon } from "../components/EntityIcon";
 import { CalendarIcon, Users as UsersIcon } from "../components/icons";
 import { dateLabel, dateLong, datesFor } from "./dates";
@@ -150,7 +150,7 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
         const q = normalize(query);
         const [users, docs, groups, collections] = await Promise.all([
           listUsers(query, MENTION_LIMIT).catch(() => [] as User[]),
-          query ? searchTitles(query, MENTION_LIMIT).catch(() => []) : Promise.resolve([]),
+          (query ? searchTitles(query, MENTION_LIMIT) : recentlyViewed(MENTION_LIMIT)).catch(() => []),
           listGroups(query, 3).catch(() => [] as Group[]),
           mentionableCollections().then((list) => list.filter((c) => !q || normalize(c.name).includes(q)).slice(0, 3)),
         ]);

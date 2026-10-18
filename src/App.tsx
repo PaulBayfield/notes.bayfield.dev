@@ -24,6 +24,7 @@ import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
 import { ShareButton } from "./components/ShareButton";
+import { DatePickerHost } from "./components/DatePicker";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 
 export default function App() {
@@ -597,6 +598,7 @@ function NotesApp({
           onError={onError}
         />
       )}
+      <DatePickerHost />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {actions.overlay}
       {toast && (
