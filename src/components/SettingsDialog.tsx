@@ -1,19 +1,16 @@
-import { useEffect, useState } from "react";
-import { isTauri } from "../lib/platform";
-import { getAutostart, setAutostart } from "../lib/desktop";
-import { useSettings, type Settings, type Theme } from "../lib/settings";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { authInfo, can, type Envelope, type Team, type User } from "../lib/api";
 import type { StringKey } from "../lib/i18n";
-import type { User } from "../lib/api";
 import { mod } from "../lib/platform";
-import { X } from "./icons";
-
-const THEMES: { id: Theme; label: StringKey }[] = [
-  { id: "system", label: "themeSystem" },
-  { id: "light", label: "themeLight" },
-  { id: "dark", label: "themeDark" },
-  { id: "rosepine", label: "themeRosepine" },
-  { id: "rosepine-dawn", label: "themeRosepineDawn" },
-];
+import type { Route } from "../lib/router";
+import { useSettings } from "../lib/settings";
+import type { Workspace } from "../lib/workspace";
+import { BellIcon, Building, Keyboard, LayoutTemplate, LinkIcon, Shield, Sliders, Smile, User as UserIcon, Users, X } from "./icons";
+import { Loading, PageHeader, SettingsPageContext, type SettingsContextValue } from "./settings/common";
+import { NotificationsPage, PreferencesPage, ProfilePage } from "./settings/AccountPages";
+import { DetailsPage, SecurityPage } from "./settings/WorkspacePages";
+import { GroupsPage, UsersPage } from "./settings/PeoplePages";
+import { EmojisPage, SharesPage, TemplatesPage } from "./settings/ContentPages";
 
 export const SHORTCUTS: { keys: string[]; label: StringKey }[] = [
   { keys: [`${mod}+K`], label: "scSearch" },
@@ -54,154 +51,144 @@ export function ShortcutList() {
   );
 }
 
-/** Launch at startup (and minimized or not), and what the close button does. */
-function DesktopSettings() {
-  const { t, settings, update } = useSettings();
-  const [autostart, setAutostartState] = useState<boolean | null>(null);
-  useEffect(() => {
-    getAutostart()
-      .then(setAutostartState)
-      .catch(() => setAutostartState(false));
-  }, []);
+export type SettingsPage = "profile" | "preferences" | "notifications" | "shortcuts" | "details" | "security" | "users" | "groups" | "templates" | "emojis" | "shares";
+
+interface NavItem {
+  id: SettingsPage;
+  label: StringKey;
+  icon: ReactNode;
+  /** Whether the signed-in user may see the page. */
+  visible?: (can: (ability: string) => boolean, me: User) => boolean;
+  page: () => ReactNode;
+}
+
+const ACCOUNT: NavItem[] = [
+  { id: "profile", label: "profile", icon: <UserIcon />, page: () => <ProfilePage /> },
+  { id: "preferences", label: "preferences", icon: <Sliders />, page: () => <PreferencesPage /> },
+  { id: "notifications", label: "notifications", icon: <BellIcon />, page: () => <NotificationsPage /> },
+  {
+    id: "shortcuts",
+    label: "shortcuts",
+    icon: <Keyboard />,
+    page: () => <ShortcutsPage />,
+  },
+];
+
+const WORKSPACE: NavItem[] = [
+  { id: "details", label: "details", icon: <Building />, visible: (can) => can("update"), page: () => <DetailsPage /> },
+  { id: "security", label: "security", icon: <Shield />, visible: (can) => can("update"), page: () => <SecurityPage /> },
+  { id: "users", label: "users", icon: <UserIcon />, visible: (can, me) => can("listUsers") || me.role !== "guest", page: () => <UsersPage /> },
+  { id: "groups", label: "groups", icon: <Users />, visible: (can, me) => can("listGroups") || me.role !== "guest", page: () => <GroupsPage /> },
+  { id: "templates", label: "templates", icon: <LayoutTemplate />, visible: (can) => can("readTemplate"), page: () => <TemplatesPage /> },
+  { id: "emojis", label: "emojis", icon: <Smile />, visible: (_can, me) => me.role !== "guest", page: () => <EmojisPage /> },
+  { id: "shares", label: "sharedLinks", icon: <LinkIcon />, visible: (can) => can("listShares"), page: () => <SharesPage /> },
+];
+
+function ShortcutsPage() {
+  const { t } = useSettings();
   return (
-    <section className="settings-grid">
-      <h3>{t("desktop")}</h3>
-      <label>
-        <span>{t("launchAtStartup")}</span>
-        <input
-          type="checkbox"
-          className="switch"
-          checked={!!autostart}
-          disabled={autostart === null}
-          onChange={(e) => {
-            const on = e.target.checked;
-            setAutostartState(on);
-            setAutostart(on).catch(() => setAutostartState(!on));
-          }}
-        />
-      </label>
-      <label className={autostart ? "" : "disabled"}>
-        <span>{t("startMinimized")}</span>
-        <input type="checkbox" className="switch" checked={settings.startMinimized} disabled={!autostart} onChange={(e) => update({ startMinimized: e.target.checked })} />
-      </label>
-      <label>
-        <span>
-          {t("closeToTray")}
-          <span className="settings-hint">{t("closeToTrayHint")}</span>
-        </span>
-        <input type="checkbox" className="switch" checked={settings.closeToTray} onChange={(e) => update({ closeToTray: e.target.checked })} />
-      </label>
-    </section>
+    <>
+      <PageHeader title={t("shortcuts")} />
+      <ShortcutList />
+    </>
   );
 }
 
-export function SettingsDialog({ user, server, onClose, onSignOut }: { user: User; server: string; onClose: () => void; onSignOut: () => void }) {
-  const { t, settings, update } = useSettings();
+interface Props {
+  user: User;
+  server: string;
+  workspace: Workspace;
+  page?: SettingsPage;
+  onClose: () => void;
+  onSignOut: () => void;
+  /** The signed-in user's name or picture changed. */
+  onUserChange: (patch: Partial<User>) => void;
+  onNavigate: (route: Route) => void;
+  flash: (message: string) => void;
+  onError: (e: unknown) => void;
+}
+
+export function SettingsDialog(p: Props) {
+  const { t } = useSettings();
+  const [page, setPage] = useState<SettingsPage>(p.page ?? "preferences");
+  const [auth, setAuth] = useState<{ me: User; team: Team; policies: Envelope<unknown> } | null>(null);
+  const { onClose, onError } = p;
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    authInfo().then(
+      (res) => setAuth({ me: res.data.user, team: res.data.team, policies: res }),
+      (e) => {
+        onError(e);
+        onClose();
+      },
+    );
+  }, [onClose, onError]);
+
+  useEffect(() => {
+    // Escape closes the settings, unless a dialog or menu on top of them handles it first.
+    const onKey = (e: KeyboardEvent) =>
+      e.key === "Escape" && !e.defaultPrevented && document.querySelectorAll(".dialog-backdrop").length === 1 && !document.querySelector(".settings-modal .menu") && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const select = <K extends keyof Settings>(key: K, options: [Settings[K], string][]) => (
-    <select
-      value={String(settings[key])}
-      onChange={(e) => update({ [key]: options.find(([v]) => String(v) === e.target.value)![0] } as Partial<Settings>)}
-    >
-      {options.map(([value, label]) => (
-        <option key={String(value)} value={String(value)}>
-          {label}
-        </option>
-      ))}
-    </select>
+  const context = useMemo<SettingsContextValue | null>(
+    () =>
+      auth && {
+        ...auth,
+        server: p.server,
+        workspace: p.workspace,
+        setMe: (patch) => {
+          setAuth((a) => a && { ...a, me: { ...a.me, ...patch } });
+          p.onUserChange(patch);
+        },
+        setTeam: (team) => setAuth((a) => a && { ...a, team }),
+        flash: p.flash,
+        onError: p.onError,
+        onNavigate: (route) => {
+          p.onClose();
+          p.onNavigate(route);
+        },
+        onSignOut: p.onSignOut,
+      },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [auth, p.server, p.workspace],
   );
-  const toggle = (key: "fullWidth" | "spellcheck") => (
-    <input type="checkbox" className="switch" checked={settings[key]} onChange={(e) => update({ [key]: e.target.checked })} />
-  );
+
+  const teamCan = (ability: string) => !!auth && can(auth.policies, auth.team.id, ability);
+  const me = auth?.me ?? p.user;
+  const workspaceItems = auth ? WORKSPACE.filter((i) => !i.visible || i.visible(teamCan, me)) : [];
+  const current = [...ACCOUNT, ...workspaceItems].find((i) => i.id === page) ?? ACCOUNT[1];
+
+  const nav = (items: NavItem[]) =>
+    items.map((i) => (
+      <button key={i.id} className={`settings-nav-item${current.id === i.id ? " active" : ""}`} onClick={() => setPage(i.id)}>
+        {i.icon}
+        <span>{t(i.label)}</span>
+      </button>
+    ));
 
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-label={t("settings")}>
-        <div className="dialog-header">
-          <h2>{t("settings")}</h2>
-          <button className="icon-button small" aria-label={t("close")} onClick={onClose}>
+      <div className="settings-modal" role="dialog" aria-label={t("settings")}>
+        <nav className="settings-nav">
+          <div className="settings-nav-label">{t("account")}</div>
+          {nav(ACCOUNT)}
+          {workspaceItems.length > 0 && (
+            <>
+              <div className="settings-nav-label">{auth?.team.name ?? t("workspace")}</div>
+              {nav(workspaceItems)}
+            </>
+          )}
+        </nav>
+        <div className="settings-content">
+          <button className="icon-button small settings-close" aria-label={t("close")} onClick={onClose}>
             <X />
           </button>
+          <div className="settings-page" key={current.id}>
+            {context ? <SettingsPageContext.Provider value={context}>{current.page()}</SettingsPageContext.Provider> : <Loading />}
+          </div>
         </div>
-
-        <section>
-          <h3>{t("appearance")}</h3>
-          <div className="theme-picker">
-            {THEMES.map(({ id, label }) => (
-              <button key={id} className={`theme-card${settings.theme === id ? " active" : ""}`} onClick={() => update({ theme: id })}>
-                <span className={`theme-preview ${id}`}>
-                  <span />
-                  <span />
-                  <span />
-                </span>
-                {t(label)}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="settings-grid">
-          <label>
-            <span>{t("language")}</span>
-            {select("language", [
-              ["auto", t("automatic")],
-              ["fr", "Français"],
-              ["en", "English"],
-            ])}
-          </label>
-        </section>
-
-        <section className="settings-grid">
-          <h3>{t("editorSection")}</h3>
-          <label>
-            <span>{t("font")}</span>
-            {select("font", [
-              ["sans", t("fontSans")],
-              ["serif", t("fontSerif")],
-              ["mono", t("fontMono")],
-            ])}
-          </label>
-          <label>
-            <span>{t("fontSize")}</span>
-            {select(
-              "fontSize",
-              [14, 15, 16, 17, 18, 20].map((n) => [n, `${n}px`]),
-            )}
-          </label>
-          <label>
-            <span>{t("fullWidth")}</span>
-            {toggle("fullWidth")}
-          </label>
-          <label>
-            <span>{t("spellcheck")}</span>
-            {toggle("spellcheck")}
-          </label>
-        </section>
-
-        {isTauri && <DesktopSettings />}
-
-        <section>
-          <h3>{t("account")}</h3>
-          <div className="server-row">
-            <span>
-              {t("signedInAs", { name: user.name })} · <span className="muted">{server.replace(/^https?:\/\//, "")}</span>
-            </span>
-            <button className="text-button" onClick={onSignOut}>
-              {t("signOut")}
-            </button>
-          </div>
-        </section>
-
-        <section>
-          <h3>{t("shortcuts")}</h3>
-          <ShortcutList />
-        </section>
       </div>
     </div>
   );

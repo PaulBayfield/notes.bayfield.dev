@@ -23,6 +23,7 @@ import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
 import { ShareButton } from "./components/ShareButton";
+import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 
 export default function App() {
   return (
@@ -70,6 +71,7 @@ function Root() {
   return (
     <NotesApp
       session={session}
+      onUserChange={(patch) => setSession((s) => s && { ...s, user: { ...s.user, ...patch } })}
       onSignedOut={() => {
         setSession(null);
         setStatus("signedOut");
@@ -79,7 +81,7 @@ function Root() {
 }
 
 
-function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () => void }) {
+function NotesApp({ session, onSignedOut, onUserChange }: { session: Session; onSignedOut: () => void; onUserChange: (patch: Partial<User>) => void }) {
   const { t, settings, update } = useSettings();
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
@@ -102,6 +104,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
   const [activeComment, setActiveComment] = useState<string | null>(null);
   const [docTick, setDocTick] = useState(0);
   const viewRef = useRef<EditorView | null>(null);
+  /** A comment to show once its page opens (from a notification). */
+  const pendingComment = useRef<string | null>(null);
 
   const onError = useCallback(
     (e: unknown) => {
@@ -150,9 +154,25 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
       setHeadings([]);
     }
     setDraftComment(null);
-    setActiveComment(null);
+    setActiveComment(pendingComment.current);
+    if (pendingComment.current) {
+      setPanelTab("comments");
+      update({ panel: true });
+    }
+    pendingComment.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route]);
+
+  const openComment = (documentId: string, commentId: string) => {
+    if (route.name === "doc" && meta?.doc.id === documentId) {
+      setActiveComment(commentId);
+      setPanelTab("comments");
+      update({ panel: true });
+      return;
+    }
+    pendingComment.current = commentId;
+    go({ name: "doc", id: documentId });
+  };
 
   const refreshToken = useCallback(async () => {
     const next = await refreshCollaborationToken();
@@ -353,6 +373,8 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
     return [...(wide ? out : out.slice(-1)), { label: meta.doc.title || t("untitled") }];
   }, [route, meta, located, workspace.collections, t, go, wide]);
 
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+
   const doSignOut = () => {
     clearTray();
     void signOut().finally(onSignedOut);
@@ -430,6 +452,15 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           panelVisible={panelVisible}
           onTogglePanel={togglePanel}
           onOpenSettings={() => setSettingsOpen(true)}
+          notifications={
+            <NotificationsButton
+              badge={(session.user.preferences?.notificationBadge as BadgeStyle | undefined) ?? "count"}
+              collectionName={(id) => workspace.collections.find((c) => c.id === id)?.name}
+              onNavigate={go}
+              onOpenComment={openComment}
+              onError={onError}
+            />
+          }
           onSignOut={doSignOut}
         />
         {error && (
@@ -528,7 +559,19 @@ function NotesApp({ session, onSignedOut }: { session: Session; onSignedOut: () 
           onClose={() => setSearchOpen(false)}
         />
       )}
-      {settingsOpen && <SettingsDialog user={session.user} server={session.server} onClose={() => setSettingsOpen(false)} onSignOut={doSignOut} />}
+      {settingsOpen && (
+        <SettingsDialog
+          user={session.user}
+          server={session.server}
+          workspace={workspace}
+          onClose={closeSettings}
+          onSignOut={doSignOut}
+          onUserChange={onUserChange}
+          onNavigate={go}
+          flash={flash}
+          onError={onError}
+        />
+      )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {actions.overlay}
       {toast && (

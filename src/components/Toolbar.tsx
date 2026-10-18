@@ -40,6 +40,8 @@ interface Props {
   onTogglePanel: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  /** The notifications bell. */
+  notifications?: ReactNode;
 }
 
 export function Toolbar(p: Props) {
@@ -86,6 +88,7 @@ export function Toolbar(p: Props) {
       {p.share}
       {p.publish}
       {p.docMenu}
+      {p.notifications}
       <AccountMenu user={p.user} onOpenSettings={p.onOpenSettings} onSignOut={p.onSignOut} />
       <button
         className={`icon-button panel-toggle${p.panelVisible ? " active" : ""}`}
