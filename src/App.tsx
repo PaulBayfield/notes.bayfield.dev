@@ -100,7 +100,7 @@ function NotesApp({
   const wide = useMediaQuery("(min-width: 1100px)");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
+  const [toast, setToast] = useState<{ message: string; undo?: () => void; label?: string } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   /** The open settings page, if any. */
   const [settingsOpen, setSettingsOpen] = useState<SettingsPage | true | false>(false);
@@ -222,8 +222,9 @@ function NotesApp({
   }, [docTitle]);
 
   useEffect(() => {
-    if (!toast || toast.undo) return;
-    const id = setTimeout(() => setToast(null), 2500);
+    // Undo toasts are closed by their action; other actions (e.g. a download) stay a while.
+    if (!toast || (toast.undo && !toast.label)) return;
+    const id = setTimeout(() => setToast(null), toast.undo ? 15000 : 2500);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -245,10 +246,12 @@ function NotesApp({
     [meta, route, workspace, go, onError],
   );
 
-  const flash = useCallback((message: string, undo?: () => void) => {
+  /** A short message, optionally with a button (`undo`, labelled `label` or "Undo"). */
+  const flash = useCallback((message: string, undo?: () => void, label?: string) => {
     if (!message) return setToast(null);
     setToast({
       message,
+      label,
       undo: undo
         ? () => {
             setToast(null);
@@ -616,7 +619,7 @@ function NotesApp({
           <span>{toast.message}</span>
           {toast.undo && (
             <button className="link-button" onClick={toast.undo}>
-              {t("undo")}
+              {toast.label ?? t("undo")}
             </button>
           )}
         </div>

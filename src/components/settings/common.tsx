@@ -14,7 +14,7 @@ export interface SettingsContextValue {
   workspace: Workspace;
   setMe: (patch: Partial<User>) => void;
   setTeam: (team: Team) => void;
-  flash: (message: string) => void;
+  flash: (message: string, action?: () => void, label?: string) => void;
   onError: (e: unknown) => void;
   /** Opens a page of the app (and closes the settings). */
   onNavigate: (route: Route) => void;

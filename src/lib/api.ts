@@ -471,6 +471,92 @@ export const unpublishDocument = (id: string) => call<Doc>("documents.unpublish"
 /** The document as Markdown. */
 export const exportMarkdown = (id: string) => call<string>("documents.export", { id }).then((r) => r.data);
 
+// ---------- Exports ----------
+
+/** Formats of Outline's collection and workspace exports (a zip, built in the background). */
+export type ExportFormat = "outline-markdown" | "okf" | "html" | "textbundle" | "json";
+
+export interface FileOperation {
+  id: string;
+  type: "import" | "export";
+  format: string;
+  name: string;
+  state: "creating" | "uploading" | "complete" | "error" | "expired";
+  error: string | null;
+  size: number;
+  collectionId: string | null;
+  documentId: string | null;
+  user?: User;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const exportCollection = (id: string, format: ExportFormat, includeAttachments: boolean) =>
+  call<{ fileOperation: FileOperation }>("collections.export", { id, format, includeAttachments }).then((r) => r.data.fileOperation);
+
+export const exportWorkspace = (format: ExportFormat, includeAttachments: boolean, includePrivate: boolean) =>
+  call<{ fileOperation: FileOperation }>("collections.export_all", { format, includeAttachments, includePrivate }).then((r) => r.data.fileOperation);
+
+export const listExports = () =>
+  call<FileOperation[]>("fileOperations.list", { type: "export", limit: 25, sort: "createdAt", direction: "DESC" }).then((r) => r.data);
+
+export const fileOperationInfo = (id: string) => call<FileOperation>("fileOperations.info", { id }).then((r) => r.data);
+
+export const deleteFileOperation = (id: string) => call("fileOperations.delete", { id });
+
+/**
+ * Downloads what an API method answers and saves it as a file: a save dialog on desktop, a
+ * download on the web. `accept` picks the format where the method offers several. A zip answer
+ * gets a .zip name. Returns false if cancelled.
+ */
+export async function downloadFile(method: string, body: object, name: string, accept?: string): Promise<boolean> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<boolean>("download", { method, body, name, accept: accept ?? null });
+  }
+  if (isDemo) throw new ApiError("Not available in the demo", 400);
+  const res = await fetch(`/api/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: accept ?? "*/*", ...csrfHeader() },
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+  }).catch(() => {
+    throw new ApiError("Couldn't reach the server. Check your connection.", 0);
+  });
+  if (res.status === 401) throw new AuthError();
+  if (!res.ok) {
+    const json = await res.json().catch(() => null);
+    throw new ApiError(json?.message || `${method} failed (${res.status})`, res.status);
+  }
+  const blob = await res.blob();
+  saveBlob(blob.type.includes("zip") ? zipName(name) : name, blob);
+  return true;
+}
+
+/** `notes.html` → `notes.zip` (a TextBundle's .textpack is a zip already). */
+const zipName = (name: string) => (/\.(zip|textpack)$/.test(name) ? name : `${name.replace(/\.[^.]+$/, "")}.zip`);
+
+function saveBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Downloads a finished export. */
+export async function downloadExport(op: FileOperation): Promise<boolean> {
+  const name = `${(op.name || "export").replace(/[\\/:*?"<>|]+/g, "-").trim()}.zip`;
+  if (isTauri) return downloadFile("fileOperations.redirect", { id: op.id }, name);
+  // The web follows the redirect itself: the file may be in storage on another origin.
+  const a = document.createElement("a");
+  a.href = `/api/fileOperations.redirect?id=${encodeURIComponent(op.id)}`;
+  a.download = name;
+  a.click();
+  return true;
+}
+
 export const updateDocumentSettings = (id: string, patch: { fullWidth?: boolean; insightsEnabled?: boolean; preferences?: { headingPrefix?: string } }) =>
   call<Doc>("documents.update", { id, ...patch }).then((r) => r.data);
 

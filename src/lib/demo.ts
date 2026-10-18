@@ -82,11 +82,30 @@ const textData = (text: string) => ({ type: "doc", content: text.split(/\n/).map
 
 const find = (id: string) => docs.find((d) => d.id === id || d.urlId === id);
 
+const exports: Record<string, unknown>[] = [];
+
 export async function demoCall(method: string, body: Record<string, unknown>): Promise<{ data: unknown; policies?: unknown[] }> {
   await new Promise((r) => setTimeout(r, 60));
   switch (method) {
     case "auth.info":
-      return { data: { user: me, team: { id: "t1", name: "Demo", avatarUrl: null, url: "" }, collaborationToken: "demo" } };
+      return {
+        data: { user: me, team: { id: "t1", name: "Demo", avatarUrl: null, url: "" }, collaborationToken: "demo" },
+        policies: [{ id: "t1", abilities: { update: true, createExport: true } }],
+      };
+    case "fileOperations.list":
+      return { data: exports };
+    case "fileOperations.info":
+      return { data: { ...(exports.find((x) => x.id === body.id) ?? exports[0]), state: "complete" } };
+    case "fileOperations.delete":
+      exports.splice(exports.findIndex((x) => x.id === body.id), 1);
+      return { data: null };
+    case "collections.export":
+    case "collections.export_all": {
+      const op = { id: `e${exports.length + 1}`, type: "export", format: body.format, name: body.id ? collections.find((c) => c.id === body.id)?.name : "", state: "creating", error: null, size: 0, collectionId: body.id ?? null, documentId: null, user: me, createdAt: iso(0), updatedAt: iso(0) };
+      exports.unshift(op);
+      setTimeout(() => Object.assign(op, { state: "complete", size: 482_133 }), 3000);
+      return { data: { fileOperation: op } };
+    }
     case "collections.list":
       return { data: collections };
     case "collections.documents":

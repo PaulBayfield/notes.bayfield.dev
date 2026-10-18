@@ -350,6 +350,63 @@ async fn save_file(app: AppHandle, name: String, contents: String) -> Result<boo
     Ok(true)
 }
 
+/// Calls an API method and saves its answer as a file (exports): the request first, so a zip
+/// answer can be named `.zip`, then the save dialog. `accept` picks the format where the method
+/// offers several. Redirects are followed, so `fileOperations.redirect` lands on the file itself.
+/// Returns false if the user cancelled.
+#[tauri::command]
+async fn download(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    method: String,
+    body: serde_json::Value,
+    name: String,
+    accept: Option<String>,
+) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if !method.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_') {
+        return Err("Unexpected API method".into());
+    }
+    let session = state.session.read().map_err(err)?.clone().ok_or("Signed out")?;
+    let mut req = state
+        .client
+        .post(format!("{}/api/{method}", session.server))
+        .bearer_auth(&session.token)
+        .json(&body);
+    if let Some(accept) = accept {
+        req = req.header("accept", accept);
+    }
+    let res = req.send().await.map_err(|e| format!("Couldn't reach the server: {e}"))?;
+    let status = res.status();
+    if !status.is_success() {
+        let body: serde_json::Value = res.json().await.unwrap_or_default();
+        return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("Download failed ({status})")));
+    }
+    let zip = res
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|t| t.contains("zip"));
+    let bytes = res.bytes().await.map_err(|e| format!("Download failed: {e}"))?;
+    // A TextBundle (.textpack) is a zip already.
+    let name = if zip && !name.ends_with(".zip") && !name.ends_with(".textpack") {
+        let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(&name);
+        format!("{stem}.zip")
+    } else {
+        name
+    };
+    let mut dialog = app.dialog().file().set_file_name(&name);
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    let Some(path) = with_visible_cursor(&app, || dialog.blocking_save_file()) else {
+        return Ok(false);
+    };
+    let path = path.into_path().map_err(err)?;
+    tokio::fs::write(path, &bytes).await.map_err(err)?;
+    Ok(true)
+}
+
 /// Asks for files to attach. Returns their paths (empty if cancelled).
 ///
 /// The webview's own file picker isn't used: in this frameless window it can open out of sight
@@ -628,6 +685,7 @@ pub fn run() {
             sign_in_with_browser,
             sign_out,
             save_file,
+            download,
             pick_files,
             upload_file,
             upload_bytes,

@@ -5,10 +5,10 @@ import { mod } from "../lib/platform";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
-import { BellIcon, Building, Keyboard, LayoutTemplate, LinkIcon, Shield, Sliders, Smile, User as UserIcon, Users, X } from "./icons";
+import { BellIcon, Building, Keyboard, LayoutTemplate, LinkIcon, Shield, Sliders, Smile, Upload, User as UserIcon, Users, X } from "./icons";
 import { Loading, PageHeader, SettingsPageContext, type SettingsContextValue } from "./settings/common";
 import { NotificationsPage, PreferencesPage, ProfilePage } from "./settings/AccountPages";
-import { DetailsPage, SecurityPage } from "./settings/WorkspacePages";
+import { DetailsPage, ExportPage, SecurityPage } from "./settings/WorkspacePages";
 import { GroupsPage, UsersPage } from "./settings/PeoplePages";
 import { EmojisPage, SharesPage, TemplatesPage } from "./settings/ContentPages";
 
@@ -51,7 +51,7 @@ export function ShortcutList() {
   );
 }
 
-export type SettingsPage = "profile" | "preferences" | "notifications" | "shortcuts" | "details" | "security" | "users" | "groups" | "templates" | "emojis" | "shares";
+export type SettingsPage = "profile" | "preferences" | "notifications" | "shortcuts" | "details" | "security" | "users" | "groups" | "templates" | "emojis" | "shares" | "export";
 
 interface NavItem {
   id: SettingsPage;
@@ -83,6 +83,7 @@ const WORKSPACE: NavItem[] = [
   { id: "templates", label: "templates", icon: <LayoutTemplate />, visible: (can) => can("readTemplate"), page: () => <TemplatesPage /> },
   { id: "emojis", label: "emojis", icon: <Smile />, visible: (can) => can("update"), page: () => <EmojisPage /> },
   { id: "shares", label: "sharedLinks", icon: <LinkIcon />, visible: (can) => can("listShares"), page: () => <SharesPage /> },
+  { id: "export", label: "exportTitle", icon: <Upload />, visible: (can) => can("createExport"), page: () => <ExportPage /> },
 ];
 
 function ShortcutsPage() {
@@ -107,7 +108,7 @@ interface Props {
   /** The workspace name or logo changed. */
   onTeamChange: (team: Team) => void;
   onNavigate: (route: Route) => void;
-  flash: (message: string) => void;
+  flash: (message: string, action?: () => void, label?: string) => void;
   onError: (e: unknown) => void;
 }
 

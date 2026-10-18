@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { chooseAndUploadImage, updateTeam, type Team, type UserRole } from "../../lib/api";
+import { useEffect, useState } from "react";
+import { chooseAndUploadImage, deleteFileOperation, downloadExport, listExports, updateTeam, type FileOperation, type Team, type UserRole } from "../../lib/api";
 import { useSettings } from "../../lib/settings";
 import { Avatar } from "../Avatar";
-import { PageHeader, Row, Select, Switch, usePage } from "./common";
+import { ConfirmDialog } from "../Dialogs";
+import { EXPORT_FORMATS, ExportForm, startExport } from "../ExportDialog";
+import { Trash, Upload } from "../icons";
+import { Empty, Loading, PageHeader, Row, Select, Switch, useLoad, usePage } from "./common";
 
 /** Outline's defaults for workspace preferences that were never set. */
 const TEAM_DEFAULTS: Record<string, unknown> = {
@@ -212,6 +215,109 @@ export function SecurityPage() {
         {toggle("memberCollectionCreate", "sCollectionCreate", "sCollectionCreateHint")}
         {toggle("documentEmbeds", "sEmbeds", "sEmbedsHint")}
       </section>
+    </>
+  );
+}
+
+const formatTitle = (format: string) => EXPORT_FORMATS.find((f) => f.value === format)?.title ?? format;
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let n = bytes / 1024;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n.toFixed(n < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+const inProgress = (op: FileOperation) => op.state === "creating" || op.state === "uploading";
+
+/** Exports the whole workspace, and lists recent exports to download. */
+export function ExportPage() {
+  const { t, f } = useSettings();
+  const { me, flash, onError } = usePage();
+  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<FileOperation | null>(null);
+  const { data: exports, reload } = useLoad(listExports, []);
+
+  // Follow exports being built.
+  useEffect(() => {
+    if (!exports?.some(inProgress)) return;
+    const id = setTimeout(reload, 2500);
+    return () => clearTimeout(id);
+  }, [exports, reload]);
+
+  const stateLabel = (op: FileOperation) =>
+    op.state === "complete" ? formatSize(op.size) : op.state === "error" ? t("exportFailed") : op.state === "expired" ? t("exportExpired") : t("exporting");
+
+  return (
+    <>
+      <PageHeader title={t("exportTitle")} hint={t("exportWorkspaceHint")} />
+      <ExportForm
+        canIncludePrivate={me.role === "admin"}
+        busy={busy}
+        onExport={async (format, attachments, includePrivate) => {
+          setBusy(true);
+          try {
+            await startExport({ includePrivate }, format, attachments, { flash, onError, t });
+            reload();
+          } catch (e) {
+            onError(e);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      <section className="settings-rows">
+        <h3>{t("recentExports")}</h3>
+        {!exports ? (
+          <Loading />
+        ) : exports.length === 0 ? (
+          <Empty>{t("noExports")}</Empty>
+        ) : (
+          <div className="settings-list">
+            {exports.map((op) => (
+              <div key={op.id} className={`settings-item${op.state === "expired" || op.state === "error" ? " faded" : ""}`}>
+                <Upload size={16} />
+                <div className="settings-item-text">
+                  <span className="settings-item-title">{op.name || t("wholeWorkspace")}</span>
+                  <span className="settings-hint" title={op.error ?? undefined}>
+                    {[formatTitle(op.format), stateLabel(op), op.user?.name, f.relative(op.createdAt)].filter(Boolean).join(" · ")}
+                  </span>
+                </div>
+                {op.state === "complete" && (
+                  <button className="text-button" onClick={() => void downloadExport(op).catch(onError)}>
+                    {t("download")}
+                  </button>
+                )}
+                <button className="icon-button small danger" title={t("delete")} disabled={inProgress(op)} onClick={() => setDeleting(op)}>
+                  <Trash size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+      {deleting && (
+        <ConfirmDialog
+          title={t("deleteExport")}
+          message={t("deleteExportMessage", { name: deleting.name || t("wholeWorkspace") })}
+          confirm={t("delete")}
+          danger
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            try {
+              await deleteFileOperation(deleting.id);
+              reload();
+            } catch (e) {
+              onError(e);
+            }
+          }}
+        />
+      )}
     </>
   );
 }

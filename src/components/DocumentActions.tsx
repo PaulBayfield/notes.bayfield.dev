@@ -8,6 +8,7 @@ import {
   deleteCollection,
   deleteDocument,
   documentSubscription,
+  downloadFile,
   duplicateDocument,
   exportMarkdown,
   importDocument,
@@ -37,6 +38,7 @@ import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
 import type { HeadingPrefixStyle } from "../editor/headingPrefix";
 import { CollectionDialog } from "./CollectionDialog";
+import { ExportDialog } from "./ExportDialog";
 import { ConfirmDialog, Dialog as Modal, MoveDialog } from "./Dialogs";
 import { SharePanel } from "./ShareButton";
 import type { DocMeta } from "./DocumentView";
@@ -78,7 +80,7 @@ interface Params {
   go: (r: Route) => void;
   newDoc: (collectionId?: string, parentDocumentId?: string) => Promise<void>;
   onError: (e: unknown) => void;
-  flash: (message: string, undo?: () => void) => void;
+  flash: (message: string, undo?: () => void, label?: string) => void;
   openPanel: (tab: PanelTab) => void;
   /** Reload the open document (its settings changed). */
   reloadDoc: () => void;
@@ -89,6 +91,7 @@ type Dialog =
   | { kind: "delete"; target: DocTarget }
   | { kind: "collection"; collection?: Collection }
   | { kind: "deleteCollection"; collection: Collection }
+  | { kind: "exportCollection"; collection: Collection }
   | { kind: "present" }
   | { kind: "permissions" }
   | null;
@@ -212,6 +215,7 @@ export function useDocumentActions(p: Params) {
         p.reloadDoc();
       });
     const name = collectionName(target.collectionId);
+    const fileBase = (doc.title || "untitled").replace(/[\\/:*?"<>|]+/g, "-").trim();
     return menu([
       { label: t(isStarred(doc.id) ? "unstar" : "star"), icon: <Star size={15} filled={!!isStarred(doc.id)} />, onClick: toggleStar(doc.id) },
       {
@@ -277,16 +281,49 @@ export function useDocumentActions(p: Params) {
         kind: "submenu",
         label: t("export"),
         icon: <Upload size={15} />,
-        items: [
+        items: menu([
           {
             label: t("exportMarkdown"),
             onClick: run(async () => {
               const md = await exportMarkdown(doc.id);
-              const name = `${(doc.title || "untitled").replace(/[\\/:*?"<>|]+/g, "-").trim()}.md`;
-              if (await saveTextFile(name, md)) flash(t("exported"));
+              if (await saveTextFile(`${fileBase}.md`, md)) flash(t("exported"));
             }),
           },
-        ],
+          {
+            label: t("exportHtml"),
+            onClick: run(async () => {
+              // Images are inlined; other attachments make it a zip.
+              if (await downloadFile("documents.export", { id: doc.id }, `${fileBase}.html`, "text/html")) flash(t("exported"));
+            }),
+          },
+          {
+            label: t("exportTextBundle"),
+            onClick: run(async () => {
+              if (await downloadFile("documents.export", { id: doc.id }, `${fileBase}.textpack`, "application/x-textbundle")) flash(t("exported"));
+            }),
+          },
+          !!view && {
+            label: t("exportJson"),
+            onClick: run(async () => {
+              // The document as Outline stores it (ProseMirror JSON), with its details: nothing is lost.
+              const json = {
+                id: doc.id,
+                urlId: doc.urlId,
+                title: doc.title,
+                icon: doc.icon,
+                color: doc.color,
+                collectionId: doc.collectionId,
+                parentDocumentId: doc.parentDocumentId,
+                fullWidth: !!doc.fullWidth,
+                createdAt: doc.createdAt,
+                updatedAt: doc.updatedAt,
+                publishedAt: doc.publishedAt,
+                data: view.state.doc.toJSON(),
+              };
+              if (await saveTextFile(`${fileBase}.json`, JSON.stringify(json, null, 2), "application/json")) flash(t("exported"));
+            }),
+          },
+        ]),
       },
       {
         kind: "submenu",
@@ -352,6 +389,7 @@ export function useDocumentActions(p: Params) {
       { kind: "separator" },
       { label: t("copyLink"), icon: <LinkIcon size={15} />, onClick: () => copyText(webUrl(`/collection/${c.urlId}`), t("linkCopied")) },
       { label: t("openInBrowser"), icon: <External size={15} />, onClick: () => void openExternal(webUrl(`/collection/${c.urlId}`)) },
+      { label: t("exportEllipsis"), icon: <Upload size={15} />, onClick: () => setDialog({ kind: "exportCollection", collection: c }) },
       { kind: "separator" },
       {
         label: t("archiveCollection"),
@@ -433,6 +471,8 @@ export function useDocumentActions(p: Params) {
         }}
       />
     );
+  else if (dialog?.kind === "exportCollection")
+    overlay = <ExportDialog collection={dialog.collection} onClose={close} flash={flash} onError={onError} />;
   else if (dialog?.kind === "present" && meta && p.viewRef.current)
     overlay = <Presentation title={meta.doc.title} icon={meta.doc.icon} color={meta.doc.color} doc={p.viewRef.current.state.doc} onClose={close} />;
   else if (dialog?.kind === "permissions" && meta)
