@@ -76,12 +76,17 @@ day, even on a modest laptop.
   collection's overview is an editable page (Markdown descriptions are converted), with pinned documents
 - **Document menu like Outline's:** star, subscribe, templatize, duplicate, unpublish, archive, move, import, new
   nested document, pin (collection / home), comments, history (preview and restore versions), insights, present
-  (slides split at headings and dividers), export / copy as Markdown, search & replace in document (`Ctrl+F`),
+  (slides split at headings and dividers), export (Markdown, HTML, TextBundle, JSON) / copy as Markdown, search & replace in document (`Ctrl+F`),
   heading numbering, embeds (YouTube, Vimeo, Loom, Figma, Google Docs…) and full width
 - **Presence:** collaborators' avatars in the header; hover one for their role, local time, whether they're
   reading or editing, and their recent activity
 - **Comments:** select text → 💬 (or `Ctrl+Alt+M`); threads, replies, edit, resolve, in the right panel
-- **Navigation:** search (`Ctrl+K`), contents panel, back/forward, archive/delete with undo
+- **Navigation:** reopens the last page visited, search (`Ctrl+K`), contents panel, back/forward, archive/delete
+  with undo; archived pages can be deleted too
+- **Exports:** a collection (right-click it) or the whole workspace (Settings → Export) as Markdown, Open Knowledge
+  Format, HTML, TextBundle or JSON, built by Outline in the background and downloaded from the app
+- **Updates (desktop):** the app checks GitHub releases and offers new versions; the current version is in
+  Settings → About
 - **Themes:** System, Light, Dark, Rosé Pine, Rosé Pine Dawn. UI in French or English
 - **Offline:** open documents are cached locally and sync when you're back
 
@@ -266,7 +271,7 @@ git tag v0.2.0 && git push origin v0.2.0
 ```
 
 [`release.yml`](.github/workflows/release.yml) builds the Windows installers and attaches them to a draft GitHub
-release. The web app is published as a container image on every push to `main`, see
+release. Once you publish it, the desktop app offers it to everyone (it checks the latest published release). The web app is published as a container image on every push to `main`, see
 [Web App (Docker)](#--web-app-docker).
 
 
