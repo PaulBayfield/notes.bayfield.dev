@@ -77,10 +77,11 @@ const ACCOUNT: NavItem[] = [
 const WORKSPACE: NavItem[] = [
   { id: "details", label: "details", icon: <Building />, visible: (can) => can("update"), page: () => <DetailsPage /> },
   { id: "security", label: "security", icon: <Shield />, visible: (can) => can("update"), page: () => <SecurityPage /> },
-  { id: "users", label: "users", icon: <UserIcon />, visible: (can, me) => can("listUsers") || me.role !== "guest", page: () => <UsersPage /> },
-  { id: "groups", label: "groups", icon: <Users />, visible: (can, me) => can("listGroups") || me.role !== "guest", page: () => <GroupsPage /> },
+  // Shown exactly as Outline's own settings do, from the workspace abilities it grants.
+  { id: "users", label: "users", icon: <UserIcon />, visible: (can) => can("listUsers"), page: () => <UsersPage /> },
+  { id: "groups", label: "groups", icon: <Users />, visible: (can) => can("listGroups"), page: () => <GroupsPage /> },
   { id: "templates", label: "templates", icon: <LayoutTemplate />, visible: (can) => can("readTemplate"), page: () => <TemplatesPage /> },
-  { id: "emojis", label: "emojis", icon: <Smile />, visible: (_can, me) => me.role !== "guest", page: () => <EmojisPage /> },
+  { id: "emojis", label: "emojis", icon: <Smile />, visible: (can) => can("update"), page: () => <EmojisPage /> },
   { id: "shares", label: "sharedLinks", icon: <LinkIcon />, visible: (can) => can("listShares"), page: () => <SharesPage /> },
 ];
 
