@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { EditorView } from "prosemirror-view";
-import { AuthError, createDocument, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
+import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isTauri } from "./lib/platform";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
@@ -17,7 +17,7 @@ import type { MenuEntry } from "./components/Menu";
 import { DocumentView, type DocMeta } from "./components/DocumentView";
 import { CollectionView, Home } from "./components/Home";
 import { SearchDialog } from "./components/SearchDialog";
-import { SettingsDialog } from "./components/SettingsDialog";
+import { SettingsDialog, type SettingsPage } from "./components/SettingsDialog";
 import { Panel, type PanelTab } from "./components/Panel";
 import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
@@ -72,6 +72,7 @@ function Root() {
     <NotesApp
       session={session}
       onUserChange={(patch) => setSession((s) => s && { ...s, user: { ...s.user, ...patch } })}
+      onTeamChange={(team) => setSession((s) => s && { ...s, team })}
       onSignedOut={() => {
         setSession(null);
         setStatus("signedOut");
@@ -81,7 +82,17 @@ function Root() {
 }
 
 
-function NotesApp({ session, onSignedOut, onUserChange }: { session: Session; onSignedOut: () => void; onUserChange: (patch: Partial<User>) => void }) {
+function NotesApp({
+  session,
+  onSignedOut,
+  onUserChange,
+  onTeamChange,
+}: {
+  session: Session;
+  onSignedOut: () => void;
+  onUserChange: (patch: Partial<User>) => void;
+  onTeamChange: (team: Team) => void;
+}) {
   const { t, settings, update } = useSettings();
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
@@ -89,7 +100,8 @@ function NotesApp({ session, onSignedOut, onUserChange }: { session: Session; on
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** The open settings page, if any. */
+  const [settingsOpen, setSettingsOpen] = useState<SettingsPage | true | false>(false);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [meta, setMeta] = useState<DocMeta | null>(null);
@@ -248,6 +260,7 @@ function NotesApp({ session, onSignedOut, onUserChange }: { session: Session; on
 
   const actions = useDocumentActions({
     workspace,
+    me: session.user,
     meta,
     viewRef,
     go,
@@ -397,6 +410,8 @@ function NotesApp({ session, onSignedOut, onUserChange }: { session: Session; on
           onMove={(id, target) => void moveDoc(id, target)}
           onMoveCollection={(id, index) => void reorderCollection(id, index)}
           onNewCollection={actions.newCollection}
+          team={session.team}
+          onOpenWorkspace={() => setSettingsOpen("details")}
           onCollectionMenu={(c, e) => setMenu({ x: e.clientX, y: e.clientY, items: actions.collectionMenu(c) })}
         />
       )}
@@ -566,7 +581,9 @@ function NotesApp({ session, onSignedOut, onUserChange }: { session: Session; on
           workspace={workspace}
           onClose={closeSettings}
           onSignOut={doSignOut}
+          page={settingsOpen === true ? undefined : settingsOpen}
           onUserChange={onUserChange}
+          onTeamChange={onTeamChange}
           onNavigate={go}
           flash={flash}
           onError={onError}

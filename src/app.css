@@ -2102,3 +2102,26 @@ textarea.text-field {
   text-align: center;
   font-size: 13px;
 }
+.share-panel.embedded {
+  position: static;
+  width: auto;
+  max-height: none;
+  padding: 0;
+  box-shadow: none;
+  background: none;
+  overflow: visible;
+}
+.workspace-row {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.workspace-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-row .avatar-img.square,
+.workspace-row .avatar-initial.square {
+  border-radius: 6px;
+  color: var(--on-primary);
+}

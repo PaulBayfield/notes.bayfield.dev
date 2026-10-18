@@ -58,7 +58,8 @@ export function ShareButton(p: Props) {
   );
 }
 
-function SharePanel({ documentId, collection, me, canInvite, canShare, onError, flash }: Props) {
+/** Who can open the document, and its public link. `embedded`: shown inside a dialog, not as a popover. */
+export function SharePanel({ documentId, collection, me, canInvite, canShare, onError, flash, embedded }: Props & { embedded?: boolean }) {
   const { t } = useSettings();
   const [members, setMembers] = useState<{ membership: Membership; user: User }[] | null>(null);
   const [shares, setShares] = useState<Share[] | null>(null);
@@ -142,7 +143,7 @@ function SharePanel({ documentId, collection, me, canInvite, canShare, onError, 
   const workspaceAccess = collection?.permission === "read_write" ? t("workspaceCanEdit") : collection?.permission === "read" ? t("workspaceCanView") : t("workspaceNoAccess");
 
   return (
-    <div className="share-panel" role="dialog" aria-label={t("share")}>
+    <div className={`share-panel${embedded ? " embedded" : ""}`} role={embedded ? undefined : "dialog"} aria-label={embedded ? undefined : t("share")}>
       {canInvite && (
         <div className="share-invite">
           <input

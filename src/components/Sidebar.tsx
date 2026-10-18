@@ -1,9 +1,10 @@
 import { useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from "react";
 import fractionalIndex from "fractional-index";
-import type { Collection, Doc, NavNode, Star as StarRecord } from "../lib/api";
+import type { Collection, Doc, NavNode, Star as StarRecord, Team } from "../lib/api";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
+import { Avatar } from "./Avatar";
 import { EntityIcon } from "./EntityIcon";
 import { mod } from "../lib/platform";
 import { Archive, ChevronRight, Compose, FileText, Home, PanelLeft, Pencil, Plus, Search, Star, Trash } from "./icons";
@@ -50,6 +51,9 @@ interface Props {
   onMove: (id: string, target: DropTarget) => void;
   onMoveCollection: (id: string, index: string) => void;
   onNewCollection: () => void;
+  team: Team;
+  /** The workspace name was clicked. */
+  onOpenWorkspace: () => void;
   onCollectionMenu: (collection: Collection, e: MouseEvent) => void;
 }
 
@@ -192,6 +196,10 @@ export function Sidebar(p: Props) {
         </button>
       </div>
       <nav className="sidebar-nav">
+        <button className="sidebar-row workspace-row" title={p.team.name} onClick={p.onOpenWorkspace}>
+          <Avatar user={{ name: p.team.name, color: "var(--primary)", avatarUrl: p.team.avatarUrl }} size={22} className="square" />
+          <span>{p.team.name}</span>
+        </button>
         <button className={`sidebar-row${p.route.name === "home" ? " active" : ""}`} onClick={() => p.onNavigate({ name: "home" })}>
           <Home />
           <span>{t("home")}</span>

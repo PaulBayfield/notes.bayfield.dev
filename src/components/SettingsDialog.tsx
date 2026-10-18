@@ -103,6 +103,8 @@ interface Props {
   onSignOut: () => void;
   /** The signed-in user's name or picture changed. */
   onUserChange: (patch: Partial<User>) => void;
+  /** The workspace name or logo changed. */
+  onTeamChange: (team: Team) => void;
   onNavigate: (route: Route) => void;
   flash: (message: string) => void;
   onError: (e: unknown) => void;
@@ -142,7 +144,10 @@ export function SettingsDialog(p: Props) {
           setAuth((a) => a && { ...a, me: { ...a.me, ...patch } });
           p.onUserChange(patch);
         },
-        setTeam: (team) => setAuth((a) => a && { ...a, team }),
+        setTeam: (team) => {
+          setAuth((a) => a && { ...a, team });
+          p.onTeamChange(team);
+        },
         flash: p.flash,
         onError: p.onError,
         onNavigate: (route) => {
