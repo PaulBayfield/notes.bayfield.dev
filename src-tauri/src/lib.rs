@@ -293,11 +293,56 @@ fn handle_args(app: &AppHandle, args: &[String]) {
 
 // ---------- Files ----------
 
+/// Runs `f` on the UI thread and waits for its result.
+#[cfg(windows)]
+fn on_main_thread<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(f());
+    })
+    .ok()?;
+    rx.recv().ok()
+}
+
+/// Shows a system dialog with the mouse pointer visible.
+///
+/// Windows hides the pointer while you type in the webview, and the dialog runs on the same UI
+/// thread, so one opened from the keyboard (the editor's /image command) kept it hidden: the
+/// pointer was invisible over the dialog. It's shown for the dialog, then put back as it was.
+fn with_visible_cursor<T>(app: &AppHandle, show: impl FnOnce() -> T) -> T {
+    #[cfg(windows)]
+    let shown = on_main_thread(app, || {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{LoadCursorW, SetCursor, ShowCursor, IDC_ARROW};
+        let mut shown = 0;
+        // ShowCursor counts: the pointer shows once the count is back at zero or more.
+        while shown < 32 {
+            shown += 1;
+            if unsafe { ShowCursor(1) } >= 0 {
+                break;
+            }
+        }
+        unsafe { SetCursor(LoadCursorW(std::ptr::null_mut(), IDC_ARROW)) };
+        shown
+    })
+    .unwrap_or(0);
+    #[cfg(not(windows))]
+    let _ = app;
+    let out = show();
+    #[cfg(windows)]
+    on_main_thread(app, move || {
+        for _ in 0..shown {
+            unsafe { windows_sys::Win32::UI::WindowsAndMessaging::ShowCursor(0) };
+        }
+    });
+    out
+}
+
 /// Asks where to save a file, then writes it. Returns false if the user cancelled.
 #[tauri::command]
 async fn save_file(app: AppHandle, name: String, contents: String) -> Result<bool, String> {
     use tauri_plugin_dialog::DialogExt;
-    let Some(path) = app.dialog().file().set_file_name(&name).blocking_save_file() else {
+    let dialog = app.dialog().file().set_file_name(&name);
+    let Some(path) = with_visible_cursor(&app, || dialog.blocking_save_file()) else {
         return Ok(false);
     };
     let path = path.into_path().map_err(err)?;
@@ -319,8 +364,7 @@ async fn pick_files(app: AppHandle, images: bool) -> Vec<String> {
     if images {
         dialog = dialog.add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico"]);
     }
-    dialog
-        .blocking_pick_files()
+    with_visible_cursor(&app, || dialog.blocking_pick_files())
         .unwrap_or_default()
         .into_iter()
         .filter_map(|p| p.into_path().ok())
