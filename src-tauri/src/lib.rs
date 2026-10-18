@@ -364,24 +364,29 @@ fn content_type_of(name: &str) -> &'static str {
     }
 }
 
-/// Creates an attachment on a document and uploads its contents, the way Outline's editor does.
+/// Creates an attachment and uploads its contents, the way Outline's editor does. `preset` is
+/// Outline's attachment kind ("documentAttachment", "avatar", "emoji"); only document
+/// attachments belong to a document.
 ///
 /// Done here rather than with `fetch` through the `notes://` protocol because WebView2 doesn't
 /// pass file bodies (multipart forms) on to custom protocols, so uploads arrived empty.
-async fn upload(state: &AppState, document_id: &str, name: &str, content_type: &str, bytes: Vec<u8>) -> Result<Attachment, String> {
+async fn upload(state: &AppState, document_id: &str, preset: &str, name: &str, content_type: &str, bytes: Vec<u8>) -> Result<Attachment, String> {
     let session = state.session.read().map_err(err)?.clone().ok_or("Signed out")?;
     let size = bytes.len() as u64;
+    let mut body = serde_json::json!({
+        "name": name,
+        "contentType": content_type,
+        "size": size,
+        "preset": if preset.is_empty() { "documentAttachment" } else { preset },
+    });
+    if !document_id.is_empty() {
+        body["documentId"] = document_id.into();
+    }
     let res = state
         .client
         .post(format!("{}/api/attachments.create", session.server))
         .bearer_auth(&session.token)
-        .json(&serde_json::json!({
-            "documentId": document_id,
-            "name": name,
-            "contentType": content_type,
-            "size": size,
-            "preset": "documentAttachment",
-        }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("Couldn't reach the server: {e}"))?;
@@ -437,15 +442,16 @@ async fn upload(state: &AppState, document_id: &str, name: &str, content_type: &
 
 /// Uploads a file picked with `pick_files`.
 #[tauri::command]
-async fn upload_file(state: tauri::State<'_, AppState>, document_id: String, path: String) -> Result<Attachment, String> {
+async fn upload_file(state: tauri::State<'_, AppState>, document_id: Option<String>, path: String, preset: Option<String>) -> Result<Attachment, String> {
     let path = std::path::PathBuf::from(path);
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
     let bytes = tokio::fs::read(&path).await.map_err(|e| format!("Couldn't read {name}: {e}"))?;
-    upload(&state, &document_id, &name, content_type_of(&name), bytes).await
+    let document_id = document_id.unwrap_or_default();
+    upload(&state, &document_id, preset.as_deref().unwrap_or_default(), &name, content_type_of(&name), bytes).await
 }
 
-/// Uploads a pasted or dropped file. The body is its raw bytes; `x-document-id`, `x-file-name`
-/// (URI-encoded) and `x-content-type` describe it.
+/// Uploads a pasted, dropped or chosen file. The body is its raw bytes; `x-document-id`,
+/// `x-preset`, `x-file-name` (URI-encoded) and `x-content-type` describe it.
 #[tauri::command]
 async fn upload_bytes(state: tauri::State<'_, AppState>, request: tauri::ipc::Request<'_>) -> Result<Attachment, String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
@@ -461,7 +467,7 @@ async fn upload_bytes(state: tauri::State<'_, AppState>, request: tauri::ipc::Re
     let given = header("x-content-type");
     let content_type = if given.is_empty() { content_type_of(&name).to_owned() } else { given };
     let bytes = bytes.clone();
-    upload(&state, &document_id, &name, &content_type, bytes).await
+    upload(&state, &document_id, &header("x-preset"), &name, &content_type, bytes).await
 }
 
 // ---------- API proxy (notes:// protocol) ----------
