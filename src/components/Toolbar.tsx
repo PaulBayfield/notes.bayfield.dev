@@ -151,12 +151,14 @@ function PresenceAvatar({ face, documentId }: { face: Face; documentId?: string 
 
 const MAX_FACES = 6;
 
-/** Who is here now, then who has edited the page before (as Outline's header does). */
+/**
+ * Who is here now, then who has edited the page before (as Outline's header does). You're left
+ * out: your account picture sits right next to them.
+ */
 function Presence({ users, collaborators, me, documentId }: { users: PresenceUser[]; collaborators: User[]; me: User; documentId?: string }) {
-  const faces: Face[] = users.map((u) => ({ id: u.id, name: u.name, color: u.color, status: u.editing ? "editing" : "viewing" }));
-  // Outline always counts you among those present once a page has editors to show.
-  if (collaborators.length) faces.push({ id: me.id, name: me.name, color: me.color, avatarUrl: me.avatarUrl, status: "viewing" });
+  const faces: Face[] = users.filter((u) => u.id !== me.id).map((u) => ({ id: u.id, name: u.name, color: u.color, status: u.editing ? "editing" : "viewing" }));
   for (const c of collaborators) {
+    if (c.id === me.id) continue;
     const here = faces.find((f) => f.id === c.id);
     if (here) here.avatarUrl ??= c.avatarUrl;
     else faces.push({ id: c.id, name: c.name, color: c.color, avatarUrl: c.avatarUrl, status: "away" });
