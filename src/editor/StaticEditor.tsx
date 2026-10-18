@@ -46,7 +46,7 @@ interface Props {
   placeholder: string;
   t: Translate;
   user: User;
-  onChange: (json: RichText) => void;
+  onChange: (json: RichText, doc: Node) => void;
   onOpenDocument: (id: string) => void;
 }
 
@@ -88,7 +88,7 @@ export function StaticEditor(props: Props) {
         const next = this.state.apply(tr);
         this.updateState(next);
         setState(next);
-        if (tr.docChanged) p().onChange(next.doc.toJSON() as RichText);
+        if (tr.docChanged) p().onChange(next.doc.toJSON() as RichText, next.doc);
       },
       handleDOMEvents: {
         click(v, event) {

@@ -119,13 +119,22 @@ export function CollectionView({
   const dirty = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = useRef<RichText | null>(null);
+  /** What the editor shows now, to tell our own saves (echoed back live) from others' edits. */
+  const shown = useRef<Node | null>(null);
   const collectionId = collection?.id;
 
   const load = useCallback(async () => {
     if (!collectionId) return;
     try {
       const res = await collectionDetails(collectionId);
-      setOverview((prev) => ({ doc: docFrom(res.data.data, res.data.description), editable: can(res, collectionId, "update"), version: (prev?.version ?? 0) + 1 }));
+      const doc = docFrom(res.data.data, res.data.description);
+      const editable = can(res, collectionId, "update");
+      // Remounting the editor would lose the cursor and the undo history, so only do it for a change.
+      setOverview((prev) => {
+        if (prev && shown.current?.eq(doc)) return prev.editable === editable ? prev : { ...prev, editable };
+        shown.current = doc;
+        return { doc, editable, version: (prev?.version ?? 0) + 1 };
+      });
     } catch (e) {
       onError(e);
     }
@@ -188,7 +197,8 @@ export function CollectionView({
               t={t}
               user={user}
               onOpenDocument={(docId) => onNavigate({ name: "doc", id: docId })}
-              onChange={(json) => {
+              onChange={(json, doc) => {
+                shown.current = doc;
                 dirty.current = true;
                 pending.current = json;
                 clearTimeout(saveTimer.current);
