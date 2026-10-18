@@ -23,7 +23,7 @@ import { mermaidEditingPlugin } from "./mermaid";
 import { headingPrefixPlugin, setHeadingPrefix, type HeadingPrefixStyle } from "./headingPrefix";
 import { looksLikeMarkdown, markdownToSlice } from "./markdown";
 import "katex/dist/katex.min.css";
-import "@benrbray/prosemirror-math/style/math.css";
+import "@benrbray/prosemirror-math/dist/prosemirror-math.css";
 
 export interface Heading {
   level: number;
