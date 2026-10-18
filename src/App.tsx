@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import type { EditorView } from "prosemirror-view";
 import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
-import { isTauri } from "./lib/platform";
+import { isMac, isTauri } from "./lib/platform";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
 import { SettingsProvider, useSettings } from "./lib/settings";
 import { clearTray, useDesktopSync, useTrayRecents } from "./lib/desktop";
@@ -334,8 +334,11 @@ function NotesApp({
   const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
   keyHandler.current = (e: KeyboardEvent) => {
     // The editor handles its own shortcuts first (e.g. Ctrl+K with a selection makes a link).
-    if (e.defaultPrevented) return;
-    const ctrl = e.ctrlKey || e.metaKey;
+    if (e.defaultPrevented || e.isComposing) return;
+    // Only Cmd on a Mac: on Windows `metaKey` is the Windows key, and Win+. (the emoji panel)
+    // must reach the editor instead of toggling the panel.
+    const ctrl = isMac ? e.metaKey : e.ctrlKey;
+    if (!isMac && e.metaKey) return;
     const k = e.key.toLowerCase();
     const typing = e.target instanceof HTMLElement && !!e.target.closest("input, textarea, select, [contenteditable='true']");
     if (ctrl && !e.altKey && (k === "k" || k === "p")) setSearchOpen(true);

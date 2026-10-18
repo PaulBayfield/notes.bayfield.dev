@@ -131,8 +131,13 @@ export function DocumentView(p: Props) {
     el.style.height = `${el.scrollHeight}px`;
   }, [title, meta, settings.fontSize]);
 
+  // Once: the document reloads whenever the window regains focus (e.g. after the Windows emoji
+  // panel), and that mustn't pull the cursor out of the text into the title.
+  const titleFocused = useRef(false);
   useEffect(() => {
-    if (meta && p.autoFocusTitle) titleRef.current?.focus();
+    if (!meta || !p.autoFocusTitle || titleFocused.current) return;
+    titleFocused.current = true;
+    titleRef.current?.focus();
   }, [meta, p.autoFocusTitle]);
 
   const focusEditorStart = () => {
