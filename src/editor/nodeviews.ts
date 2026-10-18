@@ -393,7 +393,7 @@ export function nodeViews(hooks: NodeViewHooks): Record<string, NodeViewConstruc
     embed: (node) => embedView(node, hooks),
     video: (node) => videoView(node),
     mention: (node, view, getPos) => mentionView(node, view, getPos, hooks),
-    math_inline: (node, view, getPos) => createMathView(false)(node, view, getPos as () => number) as unknown as NodeView,
-    math_block: (node, view, getPos) => createMathView(true)(node, view, getPos as () => number) as unknown as NodeView,
+    math_inline: (node, view, getPos, decorations, innerDecorations) => createMathView(false)(node, view, getPos, decorations, innerDecorations),
+    math_block: (node, view, getPos, decorations, innerDecorations) => createMathView(true)(node, view, getPos, decorations, innerDecorations),
   };
 }
