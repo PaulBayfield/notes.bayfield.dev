@@ -2249,3 +2249,30 @@ textarea.text-field {
 .export-format-title {
   font-weight: 500;
 }
+
+/* ---------- Updates and version ---------- */
+
+.banner-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.update-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg));
+}
+.settings-version {
+  margin-top: auto;
+  padding: 12px 8px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: left;
+}
+.settings-version:hover {
+  color: var(--text);
+}
+.version-tag {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}

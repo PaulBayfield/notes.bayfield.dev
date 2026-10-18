@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import type { EditorView } from "prosemirror-view";
 import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
-import { isMac, isTauri } from "./lib/platform";
+import { isMac, isTauri, openExternal } from "./lib/platform";
+import { useUpdateCheck } from "./lib/updates";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
 import { SettingsProvider, useSettings } from "./lib/settings";
 import { clearTray, useDesktopSync, useTrayRecents } from "./lib/desktop";
@@ -133,6 +134,8 @@ function NotesApp({
   );
 
   const workspace = useWorkspace(onError);
+  const updates = useUpdateCheck();
+  const newRelease = updates.state.status === "available" && updates.state.release.version !== settings.skippedUpdate ? updates.state.release : null;
   useDesktopSync(settings.closeToTray, settings.startMinimized, t);
   // Opens on the last page visited.
   const router = useRouter(settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" });
@@ -496,6 +499,22 @@ function NotesApp({
           }
           onSignOut={doSignOut}
         />
+        {newRelease && (
+          <div className="banner update-banner" role="status">
+            <span>{t("updateAvailable", { version: newRelease.version })}</span>
+            <span className="banner-actions">
+              <button className="link-button" onClick={() => void openExternal(newRelease.installer ?? newRelease.url)}>
+                {t("download")}
+              </button>
+              <button className="link-button" onClick={() => void openExternal(newRelease.url)}>
+                {t("whatsNew")}
+              </button>
+              <button className="link-button" onClick={() => update({ skippedUpdate: newRelease.version })}>
+                {t("later")}
+              </button>
+            </span>
+          </div>
+        )}
         {error && (
           <div className="banner" role="alert">
             <span>{error}</span>

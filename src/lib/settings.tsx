@@ -29,6 +29,8 @@ export interface Settings {
   closeToTray: boolean;
   /** Desktop: when launched at startup, stay in the tray. */
   startMinimized: boolean;
+  /** A new version the user chose not to be told about again. */
+  skippedUpdate: string;
 }
 
 const STORAGE_KEY = "notes.settings";
@@ -49,6 +51,7 @@ const DEFAULTS: Settings = {
   lastPath: "",
   closeToTray: true,
   startMinimized: true,
+  skippedUpdate: "",
 };
 
 function load(): Settings {

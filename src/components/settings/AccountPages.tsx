@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { chooseAndUploadImage, setNotification, updateMe } from "../../lib/api";
 import { getAutostart, setAutostart } from "../../lib/desktop";
 import type { StringKey } from "../../lib/i18n";
-import { isTauri } from "../../lib/platform";
+import { isTauri, openExternal } from "../../lib/platform";
+import { APP_VERSION, RELEASES_URL, useUpdateCheck } from "../../lib/updates";
 import { useSettings, type Settings, type Theme } from "../../lib/settings";
 import { Avatar } from "../Avatar";
 import type { BadgeStyle } from "../NotificationsButton";
@@ -246,6 +247,67 @@ export function NotificationsPage() {
             <Switch checked={isOn(e)} onChange={(on) => change(on, e.event)} />
           </Row>
         ))}
+      </section>
+    </>
+  );
+}
+
+/** The app's version, and a way to look for a newer one. */
+export function AboutPage() {
+  const { t, settings, update } = useSettings();
+  const { server } = usePage();
+  const { state, check } = useUpdateCheck(false);
+  const release = state.status === "available" ? state.release : null;
+  useEffect(() => {
+    void check();
+  }, [check]);
+
+  const status =
+    state.status === "checking" || state.status === "idle"
+      ? t("checkingUpdates")
+      : state.status === "upToDate"
+        ? t("upToDate")
+        : state.status === "error"
+          ? t("updateCheckFailed")
+          : t("updateAvailable", { version: release?.version ?? "" });
+
+  return (
+    <>
+      <PageHeader title={t("about")} />
+      <section className="settings-rows">
+        <Row label={t("appName")} hint={isTauri ? t("aboutDesktop") : t("aboutWeb")}>
+          <span className="version-tag">{t("versionLabel", { version: APP_VERSION })}</span>
+        </Row>
+        <Row label={t("updates")} hint={status}>
+          {release ? (
+            <>
+              <button className="text-button" onClick={() => void openExternal(release.url)}>
+                {t("whatsNew")}
+              </button>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  if (settings.skippedUpdate === release.version) update({ skippedUpdate: "" });
+                  void openExternal(release.installer ?? release.url);
+                }}
+              >
+                {t("download")}
+              </button>
+            </>
+          ) : (
+            <button className="text-button" disabled={state.status === "checking"} onClick={() => void check()}>
+              {t("checkForUpdates")}
+            </button>
+          )}
+        </Row>
+        <Row label={t("serverLabel")}>
+          <span className="muted">{server.replace(/^https?:\/\//, "")}</span>
+        </Row>
+        <Row label={t("releaseNotes")}>
+          <button className="text-button" onClick={() => void openExternal(RELEASES_URL)}>
+            {t("openInBrowser")}
+          </button>
+        </Row>
       </section>
     </>
   );

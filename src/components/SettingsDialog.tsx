@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { authInfo, can, type Envelope, type Team, type User } from "../lib/api";
 import type { StringKey } from "../lib/i18n";
 import { mod } from "../lib/platform";
+import { APP_VERSION } from "../lib/updates";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
-import { BellIcon, Building, Keyboard, LayoutTemplate, LinkIcon, Shield, Sliders, Smile, Upload, User as UserIcon, Users, X } from "./icons";
+import { BellIcon, Building, Info, Keyboard, LayoutTemplate, LinkIcon, Shield, Sliders, Smile, Upload, User as UserIcon, Users, X } from "./icons";
 import { Loading, PageHeader, SettingsPageContext, type SettingsContextValue } from "./settings/common";
-import { NotificationsPage, PreferencesPage, ProfilePage } from "./settings/AccountPages";
+import { AboutPage, NotificationsPage, PreferencesPage, ProfilePage } from "./settings/AccountPages";
 import { DetailsPage, ExportPage, SecurityPage } from "./settings/WorkspacePages";
 import { GroupsPage, UsersPage } from "./settings/PeoplePages";
 import { EmojisPage, SharesPage, TemplatesPage } from "./settings/ContentPages";
@@ -51,7 +52,7 @@ export function ShortcutList() {
   );
 }
 
-export type SettingsPage = "profile" | "preferences" | "notifications" | "shortcuts" | "details" | "security" | "users" | "groups" | "templates" | "emojis" | "shares" | "export";
+export type SettingsPage = "profile" | "preferences" | "notifications" | "shortcuts" | "details" | "security" | "users" | "groups" | "templates" | "emojis" | "shares" | "export" | "about";
 
 interface NavItem {
   id: SettingsPage;
@@ -72,6 +73,7 @@ const ACCOUNT: NavItem[] = [
     icon: <Keyboard />,
     page: () => <ShortcutsPage />,
   },
+  { id: "about", label: "about", icon: <Info />, page: () => <AboutPage /> },
 ];
 
 const WORKSPACE: NavItem[] = [
@@ -187,6 +189,9 @@ export function SettingsDialog(p: Props) {
               {nav(workspaceItems)}
             </>
           )}
+          <button className="settings-version" onClick={() => setPage("about")}>
+            {t("versionLabel", { version: APP_VERSION })}
+          </button>
         </nav>
         <div className="settings-content">
           <button className="icon-button small settings-close" aria-label={t("close")} onClick={onClose}>
