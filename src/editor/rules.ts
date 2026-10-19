@@ -66,9 +66,47 @@ function checklistRule(): InputRule {
   });
 }
 
+/**
+ * Replaces typed text with a symbol (`->` becomes `→`), as in Outline's SmartText. When the
+ * pattern has a capture group, only that part is replaced and the rest of the match is kept.
+ * Never fires in code. Backspace straight after undoes it.
+ */
+function textRule(pattern: RegExp, symbol: string): InputRule {
+  return new InputRule(pattern, (state, match, start, end) => {
+    const $start = state.doc.resolve(start);
+    if ($start.parent.type.spec.code || marks.code_inline.isInSet(state.storedMarks ?? $start.marks())) return null;
+    if (match[1] === undefined) return state.tr.insertText(symbol, start, end);
+    const from = start + match[0].lastIndexOf(match[1]);
+    // The last character of the match is still being typed, so it isn't in the document yet.
+    return state.tr.insertText(symbol, from, Math.min(from + match[1].length, end));
+  });
+}
+
+/** Arrows and typography, from Outline and Notion. */
+const smartText = (): InputRule[] => [
+  textRule(/<=>$/, "⇔"),
+  textRule(/(?:<->|←>)$/, "↔"),
+  textRule(/=>$/, "⇒"),
+  textRule(/->$/, "→"),
+  textRule(/<-$/, "←"),
+  // Not after a pipe, which would clash with typing a table row.
+  textRule(/(?:^|[^|-])(--\s)$/, "— "),
+  textRule(/(?:^|\s)(1\/2)$/, "½"),
+  textRule(/(?:^|\s)(3\/4)$/, "¾"),
+  textRule(/\(c\)$/i, "©"),
+  textRule(/\(r\)$/i, "®"),
+  textRule(/\(tm\)$/i, "™"),
+  textRule(/\.\.\.$/, "…"),
+  textRule(/(?:^|[\s{[(<'"‘“])(")$/, "“"),
+  textRule(/^(?!.*`)[\s\S]*(")$/, "”"),
+  textRule(/(?:^|[\s{[(<'"‘“])(')$/, "‘"),
+  textRule(/^(?!.*`)[\s\S]*(')$/, "’"),
+];
+
 function rules(): Plugin {
   return inputRules({
     rules: [
+      ...smartText(),
       textblockTypeInputRule(/^(#{1,4})\s$/, nodes.heading, (m) => ({ level: m[1].length })),
       wrappingInputRule(/^\s*>\s$/, nodes.blockquote),
       checklistRule(),
