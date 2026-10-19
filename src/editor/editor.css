@@ -970,3 +970,19 @@ body.block-dragging * {
   cursor: grabbing !important;
   user-select: none !important;
 }
+/* Where a block dragged into or out of a list or toggle will land. */
+.block-drop-line {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 59;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--primary) 75%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    transform 100ms ease-out,
+    width 100ms ease-out,
+    opacity 100ms;
+}
