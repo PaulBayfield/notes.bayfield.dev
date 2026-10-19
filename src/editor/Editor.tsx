@@ -12,7 +12,7 @@ import type { Translate } from "../lib/i18n";
 import { isTauri, openExternal, pickFiles } from "../lib/platform";
 import { connect, presence, unknownTypes, type CollabStatus, type PresenceUser } from "./collab";
 import { BubbleMenu, LINK_EVENT, PasteMenu, SuggestMenu } from "./menus";
-import { pasteMenuPlugin, pasteUrl } from "./paste";
+import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
@@ -256,6 +256,8 @@ export function Editor(props: Props) {
           if (!text || selection.$from.parent.type.spec.code) return false;
           // A single URL: a link, a mention or an embed.
           if (pasteUrl(v, text, p().user.id)) return true;
+          // A spreadsheet range: a table. Code from a code editor: a code block.
+          if (pasteStructured(v, event)) return true;
           // Markdown, unless the clipboard also has rich content (a web page, another editor).
           // Code editors put their plain text in HTML too; that still counts as Markdown.
           const fromCodeEditor = /white-space:\s*pre/.test(html) && !html.includes("data-pm-slice");

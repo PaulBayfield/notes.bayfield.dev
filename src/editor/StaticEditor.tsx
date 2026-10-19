@@ -19,7 +19,7 @@ import { highlightPlugin } from "./highlight";
 import { mermaidEditingPlugin } from "./mermaid";
 import { looksLikeMarkdown, markdownToSlice } from "./markdown";
 import { BubbleMenu, PasteMenu, SuggestMenu } from "./menus";
-import { pasteMenuPlugin, pasteUrl } from "./paste";
+import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
@@ -106,6 +106,7 @@ export function StaticEditor(props: Props) {
         const text = event.clipboardData?.getData("text/plain") ?? "";
         const html = event.clipboardData?.getData("text/html") ?? "";
         if (text && !v.state.selection.$from.parent.type.spec.code && pasteUrl(v, text, p().user.id)) return true;
+        if (pasteStructured(v, event)) return true;
         if (!text || html || v.state.selection.$from.parent.type.spec.code || !looksLikeMarkdown(text)) return false;
         const slice = markdownToSlice(text);
         if (!slice) return false;
