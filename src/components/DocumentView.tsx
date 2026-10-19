@@ -232,6 +232,7 @@ export function DocumentView(p: Props) {
           embeds={embeds}
           headingPrefix={headingPrefix}
           docId={doc.id}
+          docUrl={doc.url}
           server={p.server}
           token={p.token}
           user={p.user}

@@ -351,19 +351,26 @@ export function resolveUrl(src: string | null | undefined): string {
   return src;
 }
 
+/** The path of a link to this server ("/doc/…"), or null for other sites. */
+function internalPath(href: string): string | null {
+  if (!/^https?:\/\//i.test(href)) return href;
+  try {
+    const u = new URL(href);
+    return u.origin === server ? u.pathname : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The document a link points to, if it's an internal one ("/doc/title-AbCdEf1234"). */
 export function docIdFromHref(href: string): string | null {
-  let path = href;
-  if (/^https?:\/\//i.test(href)) {
-    try {
-      const u = new URL(href);
-      if (u.origin !== server) return null;
-      path = u.pathname;
-    } catch {
-      return null;
-    }
-  }
-  const m = path.match(/^\/doc\/(?:[^/?#]*-)?([a-zA-Z0-9]{10})(?:[/?#]|$)/);
+  const m = internalPath(href)?.match(/^\/doc\/(?:[^/?#]*-)?([a-zA-Z0-9]{10})(?:[/?#]|$)/);
+  return m ? m[1] : null;
+}
+
+/** The collection a link points to ("/collection/name-AbCdEf1234"), as its URL id. */
+export function collectionIdFromHref(href: string): string | null {
+  const m = internalPath(href)?.match(/^\/collection\/(?:[^/?#]*-)?([a-zA-Z0-9]{10})(?:[/?#]|$)/);
   return m ? m[1] : null;
 }
 

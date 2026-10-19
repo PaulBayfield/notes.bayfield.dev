@@ -18,7 +18,9 @@ import { placeholderPlugin } from "./Editor";
 import { highlightPlugin } from "./highlight";
 import { mermaidEditingPlugin } from "./mermaid";
 import { looksLikeMarkdown, markdownToSlice } from "./markdown";
-import { BubbleMenu, SuggestMenu } from "./menus";
+import { BubbleMenu, PasteMenu, SuggestMenu } from "./menus";
+import { pasteMenuPlugin, pasteUrl } from "./paste";
+import { BlockHandle } from "./blockHandle";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
 import { schema } from "./schema";
@@ -70,6 +72,7 @@ export function StaticEditor(props: Props) {
         doc: p().doc,
         plugins: [
           suggestPlugin(),
+          pasteMenuPlugin(),
           history(),
           ...editorKeymaps(false),
           mathPlugin,
@@ -102,6 +105,7 @@ export function StaticEditor(props: Props) {
       handlePaste(v, event) {
         const text = event.clipboardData?.getData("text/plain") ?? "";
         const html = event.clipboardData?.getData("text/html") ?? "";
+        if (text && !v.state.selection.$from.parent.type.spec.code && pasteUrl(v, text, p().user.id)) return true;
         if (!text || html || v.state.selection.$from.parent.type.spec.code || !looksLikeMarkdown(text)) return false;
         const slice = markdownToSlice(text);
         if (!slice) return false;
@@ -129,6 +133,8 @@ export function StaticEditor(props: Props) {
       {view && state && (
         <>
           <SuggestMenu view={view} state={state} t={props.t} self={props.user} pickFile={() => {}} uploads={false} />
+          <PasteMenu view={view} state={state} t={props.t} />
+          <BlockHandle view={view} state={state} t={props.t} />
           <BubbleMenu view={view} state={state} t={props.t} openLink={(href) => (docIdFromHref(href) ? props.onOpenDocument(docIdFromHref(href)!) : void openExternal(href))} />
         </>
       )}

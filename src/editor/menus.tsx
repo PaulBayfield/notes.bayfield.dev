@@ -13,6 +13,8 @@ import { blocks, findParent, insertBlock, isBlockActive, isMarkActive, toggleHea
 import { searchEmoji } from "./emoji";
 import { schema } from "./schema";
 import { suggestKey, suggestKeys, type SuggestState } from "./suggest";
+import { closePasteMenu, embedPastedLink, pasteMenuKey, pasteMenuKeys } from "./paste";
+import { HIGHLIGHT_COLORS, removeHighlight, setHighlight } from "./editing";
 
 const { nodes, marks } = schema;
 
@@ -143,6 +145,30 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
           })),
         ),
       );
+    } else if (trigger === "[[") {
+      // Notion's page link: documents only, as a mention.
+      const timer = setTimeout(async () => {
+        const docs = await (query.trim() ? searchTitles(query.trim(), 8) : recentlyViewed(8)).catch(() => []);
+        done(
+          docs.map((d, i) => ({
+            key: `d${d.id}`,
+            label: d.title || t("untitled"),
+            section: i === 0 ? t("documents") : undefined,
+            icon: <EntityIcon icon={d.icon} color={d.color} size={16} fallback="📄" />,
+            run: (v: EditorView) => {
+              const current = suggestKey.getState(v.state);
+              if (!current) return;
+              const node = nodes.mention.create({ type: "document", label: d.title || t("untitled"), modelId: d.id, actorId: self.id, id: crypto.randomUUID() });
+              v.dispatch(v.state.tr.replaceWith(current.from, current.to, [node, schema.text(" ")]).scrollIntoView());
+              v.focus();
+            },
+          })),
+        );
+      }, 150);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
     } else {
       // Mentions: dates (when the query reads as one), then people, documents, groups and
       // collections, as in Outline. Debounced, these hit the server.
@@ -268,6 +294,61 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
   );
 }
 
+// ---------- After pasting a link that can be embedded ----------
+
+export function PasteMenu({ view, state, t }: { view: EditorView; state: EditorState; t: Translate }) {
+  const s = pasteMenuKey.getState(state);
+  const [active, setActive] = useState(0);
+  const open = !!s;
+  const items = [
+    { key: "link", label: t("pasteKeepLink"), icon: "🔗", run: () => closePasteMenu(view) },
+    { key: "embed", label: t("pasteEmbed"), icon: "▶", run: () => embedPastedLink(view) },
+  ];
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
+  useEffect(() => {
+    if (!open) return;
+    setActive(0);
+    pasteMenuKeys.current = (e) => {
+      const list = itemsRef.current;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        // Updated now, so an Enter right after picks the new item.
+        activeRef.current = (activeRef.current + 1) % list.length;
+        setActive(activeRef.current);
+      } else if (e.key === "Enter" || e.key === "Tab") list[activeRef.current].run();
+      else return false;
+      return true;
+    };
+    return () => {
+      pasteMenuKeys.current = null;
+    };
+  }, [open]);
+
+  if (!s) return null;
+  const coords = view.coordsAtPos(s.to);
+  const below = coords.bottom + 120 < window.innerHeight;
+  return (
+    <div
+      className="editor-menu suggest-menu"
+      style={{
+        left: Math.min(coords.left, window.innerWidth - 280),
+        ...(below ? { top: coords.bottom + 6 } : { bottom: window.innerHeight - coords.top + 6 }),
+      }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {items.map((item, i) => (
+        <button key={item.key} className={i === active ? "active" : ""} onMouseEnter={() => setActive(i)} onClick={item.run}>
+          <span className="menu-icon">{item.icon}</span>
+          <span className="menu-text">{item.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ---------- Selection toolbar ----------
 
 function linkAt(state: EditorState): { href: string; from: number; to: number } | null {
@@ -310,7 +391,11 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
   const show = view.editable && !inCode && (editingLink !== null || ((textSelected || !!link) && view.hasFocus()));
   const inTable = isInTable(state);
 
-  useEffect(() => setEditingLink(null), [selection.from, selection.to]);
+  const [palette, setPalette] = useState(false);
+  useEffect(() => {
+    setEditingLink(null);
+    setPalette(false);
+  }, [selection.from, selection.to]);
   const linkHref = link?.href ?? "";
   useEffect(() => {
     // Synchronously, so the field has focus before the next keystroke arrives.
@@ -335,6 +420,11 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
     cmd(view.state, view.dispatch);
     view.focus();
   };
+  const pick = (cmd: (s: EditorState, d?: EditorView["dispatch"]) => boolean) => () => {
+    cmd(view.state, view.dispatch);
+    setPalette(false);
+    view.focus();
+  };
   const markButton = (label: string, title: string, type: (typeof marks)[keyof typeof marks]) => (
     <button className={isMarkActive(state, type) ? "active" : ""} title={title} onClick={run(toggleMark(type))}>
       {label}
@@ -355,7 +445,22 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
 
   return (
     <div className="editor-menu bubble-menu" ref={ref} style={pos ?? { visibility: "hidden" }} onMouseDown={(e) => e.target instanceof HTMLInputElement || e.preventDefault()}>
-      {editingLink !== null ? (
+      {palette ? (
+        <>
+          <button className="swatch" title={t("defaultColor")} onClick={pick(setHighlight(null))}>
+            <span style={{ background: "color-mix(in srgb, var(--warning) var(--mark-strength), transparent)" }} />
+          </button>
+          {HIGHLIGHT_COLORS.map((c) => (
+            <button key={c.hex} className="swatch" title={c.name} onClick={pick(setHighlight(c.hex))}>
+              <span style={{ background: `color-mix(in srgb, ${c.hex} var(--mark-strength), transparent)` }} />
+            </button>
+          ))}
+          <span className="menu-sep" />
+          <button title={t("removeHighlight")} onClick={pick(removeHighlight)}>
+            ✕
+          </button>
+        </>
+      ) : editingLink !== null ? (
         <input
           autoFocus
           className="link-input"
@@ -393,7 +498,9 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
           {markButton("U", `${t("underline")} (Ctrl+U)`, marks.underline)}
           {markButton("S", `${t("strikethrough")} (Ctrl+D)`, marks.strikethrough)}
           {markButton("</>", `${t("inlineCode")} (Ctrl+E)`, marks.code_inline)}
-          {markButton("H", `${t("highlight")} (Ctrl+Shift+H)`, marks.highlight)}
+          <button className={isMarkActive(state, marks.highlight) ? "active" : ""} title={`${t("highlight")} (Ctrl+Shift+H)`} onClick={() => setPalette(true)}>
+            H
+          </button>
           <button className={link ? "active" : ""} title={`${t("link")} (Ctrl+K)`} onClick={() => setEditingLink(link?.href ?? "")}>
             🔗
           </button>

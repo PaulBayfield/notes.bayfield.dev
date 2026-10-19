@@ -11,7 +11,9 @@ import { docIdFromHref, uploadAttachment, uploadAttachmentFromPath, webUrl, type
 import type { Translate } from "../lib/i18n";
 import { isTauri, openExternal, pickFiles } from "../lib/platform";
 import { connect, presence, unknownTypes, type CollabStatus, type PresenceUser } from "./collab";
-import { BubbleMenu, LINK_EVENT, SuggestMenu } from "./menus";
+import { BubbleMenu, LINK_EVENT, PasteMenu, SuggestMenu } from "./menus";
+import { pasteMenuPlugin, pasteUrl } from "./paste";
+import { BlockHandle } from "./blockHandle";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
 import { schema } from "./schema";
@@ -35,6 +37,8 @@ export type EditorStatus = CollabStatus | "loading" | "unsupported";
 
 interface Props {
   docId: string;
+  /** The document's path ("/doc/…"), for links to its headings. */
+  docUrl?: string;
   server: string;
   token: string;
   user: User;
@@ -170,6 +174,11 @@ export function Editor(props: Props) {
         return;
       }
       const t = p().t;
+      const comment = (_s: EditorState, _d: unknown, v?: EditorView) => {
+        const id = v && startComment(v, p().user.id);
+        if (id) p().onStartComment(id);
+        return !!id;
+      };
       const editorState = EditorState.create({
         schema,
         plugins: [
@@ -178,17 +187,22 @@ export function Editor(props: Props) {
           yCursorPlugin(provider.awareness),
           yUndoPlugin(),
           keymap({
-            "Mod-Alt-m": (_s, _d, v) => {
-              const id = v && startComment(v, p().user.id);
-              if (id) p().onStartComment(id);
-              return !!id;
-            },
+            "Mod-Alt-m": comment,
+            "Mod-Shift-m": comment,
             "Mod-k": (s) => {
               if (s.selection.empty) return false;
               window.dispatchEvent(new Event(LINK_EVENT));
               return true;
             },
+            // In a link: opens it.
+            "Mod-Enter": (s) => {
+              const link = s.selection.empty && schema.marks.link.isInSet(s.selection.$from.marks());
+              if (!link) return false;
+              openLink(link.attrs.href);
+              return true;
+            },
           }),
+          pasteMenuPlugin(),
           ...editorKeymaps(),
           mathPlugin,
           tableEditing(),
@@ -240,11 +254,8 @@ export function Editor(props: Props) {
           const html = event.clipboardData?.getData("text/html") ?? "";
           const { selection } = v.state;
           if (!text || selection.$from.parent.type.spec.code) return false;
-          // A link pasted over selected text links that text.
-          if (!selection.empty && /^https?:\/\/\S+$/.test(text.trim())) {
-            v.dispatch(v.state.tr.addMark(selection.from, selection.to, schema.marks.link.create({ href: text.trim() })));
-            return true;
-          }
+          // A single URL: a link, a mention or an embed.
+          if (pasteUrl(v, text, p().user.id)) return true;
           // Markdown, unless the clipboard also has rich content (a web page, another editor).
           // Code editors put their plain text in HTML too; that still counts as Markdown.
           const fromCodeEditor = /white-space:\s*pre/.test(html) && !html.includes("data-pm-slice");
@@ -340,6 +351,8 @@ export function Editor(props: Props) {
               }
             }}
           />
+          <PasteMenu view={view} state={state} t={props.t} />
+          <BlockHandle view={view} state={state} t={props.t} docUrl={props.docUrl} />
           <BubbleMenu
             view={view}
             state={state}

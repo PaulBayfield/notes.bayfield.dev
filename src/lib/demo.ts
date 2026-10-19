@@ -111,7 +111,7 @@ export async function demoCall(method: string, body: Record<string, unknown>): P
     case "collections.documents":
       return { data: trees[body.id as string] ?? [] };
     case "collections.info": {
-      const c = collections.find((x) => x.id === body.id);
+      const c = collections.find((x) => x.id === body.id || x.urlId === body.id);
       return {
         data: { ...c, description: overviews[String(body.id)] ? undefined : "## About\n\nA **sample** collection with a [link](https://rosepinetheme.com).\n\n- [ ] Write the overview\n- [x] Pick an icon", data: overviews[String(body.id)] ?? null },
         policies: [{ id: body.id, abilities: { update: true } }],

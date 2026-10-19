@@ -878,3 +878,95 @@ button.doc-icon:hover {
 .doc-content .mention-group {
   cursor: default;
 }
+
+/* ---------- Block handle (Notion) ---------- */
+
+.block-handle {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  gap: 1px;
+  animation: popover-in 90ms ease-out;
+}
+.block-handle button {
+  width: 22px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+}
+.block-handle button:hover {
+  background: var(--hover);
+  color: var(--text-muted);
+}
+.block-handle .grip {
+  cursor: grab;
+}
+.block-handle .grip:active {
+  cursor: grabbing;
+}
+.block-menu {
+  max-height: 380px;
+}
+.block-menu-search {
+  margin: 2px 2px 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.block-menu-row button {
+  width: 100%;
+}
+/* A selected block (Escape, or the block menu). */
+.doc-content .ProseMirror-selectednode:is(p, h1, h2, h3, h4, li, blockquote, ul, ol, table, .toggle-block, .notice-block) {
+  outline: none;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 4px;
+}
+
+/* ---------- Highlight colours ---------- */
+
+.bubble-menu .swatch {
+  min-width: 28px;
+  display: grid;
+  place-items: center;
+}
+.bubble-menu .swatch span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+}
+
+/* ---------- Dragging blocks ---------- */
+
+/* The block being dragged, lifted above the others and following the pointer. */
+.doc-content .drag-lifted {
+  position: relative;
+  z-index: 20;
+  border-radius: 6px;
+  background: var(--bg-elevated, var(--bg));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent),
+    0 12px 28px -8px rgba(0, 0, 0, 0.28);
+  opacity: 0.94;
+  pointer-events: none;
+  will-change: transform;
+}
+/* The blocks around it, sliding out of its way. */
+.doc-content .drag-shifting {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
+}
+body.block-dragging,
+body.block-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}

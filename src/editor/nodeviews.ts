@@ -10,7 +10,7 @@ import { CODE_LANGUAGES } from "./codeLanguages";
 import { dateLabel, dateLong, PICK_DATE_EVENT, withDay, type PickDateRequest } from "./dates";
 import { pickableLanguages } from "./highlight";
 import { isMermaid, onThemeChange, renderMermaid } from "./mermaid";
-import { TextSelection } from "prosemirror-state";
+import { TextSelection, type Command } from "prosemirror-state";
 
 export interface NodeViewHooks {
   /** Opens a link: internal documents in the app, the rest in the browser. */
@@ -214,6 +214,17 @@ class CheckboxView implements NodeView {
   }
 }
 
+const TOGGLE_ALL_EVENT = "notes:toggle-all";
+
+/** Ctrl+Alt+T: folds every toggle in the document, or opens them all when they're all folded. */
+export const toggleAllToggles: Command = (_state, _dispatch, view) => {
+  const blocks = view ? [...view.dom.querySelectorAll(".toggle-block")] : [];
+  if (!view || !blocks.length) return false;
+  const fold = blocks.some((b) => !b.classList.contains("folded"));
+  window.dispatchEvent(new CustomEvent(TOGGLE_ALL_EVENT, { detail: { root: view.dom, fold } }));
+  return true;
+};
+
 class ToggleView implements NodeView {
   dom: HTMLElement;
   contentDOM: HTMLElement;
@@ -232,6 +243,17 @@ class ToggleView implements NodeView {
     this.contentDOM = el("div", { class: "toggle-content" });
     this.dom = el("div", { class: "toggle-block" }, button, this.contentDOM);
     this.sync();
+    window.addEventListener(TOGGLE_ALL_EVENT, this.onToggleAll);
+  }
+  private onToggleAll = (e: Event) => {
+    const { root, fold } = (e as CustomEvent<{ root: HTMLElement; fold: boolean }>).detail;
+    if (!root.contains(this.dom)) return;
+    if (fold) this.hooks.foldedToggles.add(this.key());
+    else this.hooks.foldedToggles.delete(this.key());
+    this.sync();
+  };
+  destroy() {
+    window.removeEventListener(TOGGLE_ALL_EVENT, this.onToggleAll);
   }
   private key() {
     return String(this.node.attrs.id ?? "");
