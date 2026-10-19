@@ -27,6 +27,7 @@ import { DocListPage } from "./components/DocListPage";
 import { ShareButton } from "./components/ShareButton";
 import { DatePickerHost } from "./components/DatePicker";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
+import { setSmartText } from "./editor/rules";
 
 export default function App() {
   return (
@@ -57,6 +58,9 @@ function Root() {
       });
   }, []);
   useEffect(restore, [restore]);
+  // The editor follows the user's smart text preference, kept in Outline.
+  const userPreferences = session?.user.preferences;
+  useEffect(() => setSmartText(userPreferences), [userPreferences]);
 
   if (status === "loading") return <div className="splash" data-tauri-drag-region />;
   if (status === "unreachable")

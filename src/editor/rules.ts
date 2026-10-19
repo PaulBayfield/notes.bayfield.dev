@@ -91,6 +91,14 @@ function checklistRule(): InputRule {
   });
 }
 
+/** Outline's "smart text" preference: off, typed text is left as it is. */
+let smartTextEnabled = true;
+
+/** Follows the user's `enableSmartText` preference (on unless turned off, as in Outline). */
+export function setSmartText(preferences: Record<string, unknown> | null | undefined) {
+  smartTextEnabled = preferences?.enableSmartText !== false;
+}
+
 /**
  * Replaces typed text with a symbol (`->` becomes `→`), as in Outline's SmartText. When the
  * pattern has a capture group, only that part is replaced and the rest of the match is kept.
@@ -98,6 +106,7 @@ function checklistRule(): InputRule {
  */
 function textRule(pattern: RegExp, symbol: string): InputRule {
   return new InputRule(pattern, (state, match, start, end) => {
+    if (!smartTextEnabled) return null;
     const $start = state.doc.resolve(start);
     if ($start.parent.type.spec.code || marks.code_inline.isInSet(state.storedMarks ?? $start.marks())) return null;
     if (match[1] === undefined) return state.tr.insertText(symbol, start, end);

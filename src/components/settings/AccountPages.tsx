@@ -197,6 +197,17 @@ export function PreferencesPage() {
         <Row label={t("spellcheck")}>
           <Switch checked={settings.spellcheck} onChange={(on) => update({ spellcheck: on })} />
         </Row>
+        <Row label={t("smartText")} hint={t("smartTextHint")}>
+          <Switch
+            checked={me.preferences?.enableSmartText !== false}
+            onChange={(on) => {
+              // Saved in Outline, which reads the same preference.
+              const preferences = { ...me.preferences, enableSmartText: on };
+              setMe({ preferences });
+              updateMe({ preferences }).then(() => flash(t("saved")), onError);
+            }}
+          />
+        </Row>
       </section>
       {isTauri && <DesktopSettings />}
     </>
