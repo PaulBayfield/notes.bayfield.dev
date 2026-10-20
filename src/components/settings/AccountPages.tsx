@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, chooseAndUploadImage, setNotification, updateMe } from "../../lib/api";
+import { ApiError, chooseAndUploadImage, installationInfo, setNotification, updateMe, type InstallationInfo } from "../../lib/api";
 import { getAutostart, setAutostart } from "../../lib/desktop";
 import type { StringKey } from "../../lib/i18n";
 import { isTauri, openExternal } from "../../lib/platform";
@@ -330,6 +330,8 @@ export function NotificationsPage() {
   );
 }
 
+const OUTLINE_RELEASES_URL = "https://github.com/outline/outline/releases";
+
 /** The app's version, and a way to look for a newer one. */
 export function AboutPage() {
   const { t, settings, update } = useSettings();
@@ -348,6 +350,15 @@ export function AboutPage() {
         : state.status === "error"
           ? t("updateCheckFailed")
           : t("updateAvailable", { version: release?.version ?? "" });
+
+  // The Outline version the server runs (self-hosted servers only).
+  const [outline, setOutline] = useState<InstallationInfo | null>(null);
+  useEffect(() => {
+    void installationInfo().then(setOutline);
+  }, []);
+  const host = server.replace(/^https?:\/\//, "");
+  const behind = outline?.versionsBehind ?? -1;
+  const behindLabel = behind < 0 ? t("outlineUnknown") : behind === 0 ? t("outlineUpToDate") : t(behind === 1 ? "outlineBehindOne" : "outlineBehind", { n: behind });
 
   return (
     <>
@@ -379,8 +390,27 @@ export function AboutPage() {
           )}
         </Row>
         <Row label={t("serverLabel")}>
-          <span className="muted">{server.replace(/^https?:\/\//, "")}</span>
+          <span className="muted">{host}</span>
         </Row>
+        {outline && (
+          <>
+            <Row label={t("outlineVersionLabel")}>
+              <span className="version-tag">{outline.version}</span>
+            </Row>
+            <Row label={t("outlineLatestLabel")}>
+              {outline.latestVersion ? (
+                <button className="text-button" title={t("releaseNotes")} onClick={() => void openExternal(OUTLINE_RELEASES_URL)}>
+                  {outline.latestVersion}
+                </button>
+              ) : (
+                <span className="muted">{t("outlineUnknown")}</span>
+              )}
+            </Row>
+            <Row label={t("outlineStatusLabel")}>
+              <span className={`badge${behind > 0 ? " warning" : ""}`}>{behindLabel}</span>
+            </Row>
+          </>
+        )}
         <Row label={t("releaseNotes")}>
           <button className="text-button" onClick={() => void openExternal(RELEASES_URL)}>
             {t("openInBrowser")}

@@ -49,6 +49,10 @@ a.primary-button,
   background: var(--hover);
   color: var(--text-muted);
 }
+.badge.warning {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
 .empty-state {
   flex: 1;
   display: grid;

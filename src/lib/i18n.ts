@@ -592,6 +592,13 @@ const en = {
   switching: "Switching…",
   signOutOf: "Sign out of {name}",
   workspacesHint: "Each workspace keeps its own sign-in on this device.",
+  outlineVersionLabel: "Outline version",
+  outlineLatestLabel: "Latest Outline release",
+  outlineStatusLabel: "Server status",
+  outlineUpToDate: "Up to date",
+  outlineBehindOne: "1 version behind",
+  outlineBehind: "{n} versions behind",
+  outlineUnknown: "Unknown",
 };
 
 export type StringKey = keyof typeof en;
@@ -1184,6 +1191,13 @@ const fr: Record<StringKey, string> = {
   switching: "Changement…",
   signOutOf: "Se déconnecter de {name}",
   workspacesHint: "Chaque espace garde sa propre connexion sur cet appareil.",
+  outlineVersionLabel: "Version d'Outline",
+  outlineLatestLabel: "Dernière version d'Outline",
+  outlineStatusLabel: "État du serveur",
+  outlineUpToDate: "À jour",
+  outlineBehindOne: "1 version de retard",
+  outlineBehind: "{n} versions de retard",
+  outlineUnknown: "Inconnue",
 };
 
 const strings: Record<Lang, Record<StringKey, string>> = { en, fr };

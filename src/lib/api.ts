@@ -788,6 +788,19 @@ export const updateMe = (patch: { name?: string; avatarUrl?: string | null; lang
 export const setNotification = (on: boolean, eventType: string) =>
   call(on ? "users.notificationsSubscribe" : "users.notificationsUnsubscribe", { eventType });
 
+export interface InstallationInfo {
+  version: string;
+  latestVersion?: string;
+  /** -1 when unknown. */
+  versionsBehind: number;
+}
+
+/** The Outline version the server runs. Null where it isn't available (Outline's cloud, older servers). */
+export const installationInfo = () =>
+  call<InstallationInfo>("installation.info")
+    .then((r) => (r.data?.version ? r.data : null))
+    .catch(() => null);
+
 // ---------- Notifications ----------
 
 export interface AppNotification {
