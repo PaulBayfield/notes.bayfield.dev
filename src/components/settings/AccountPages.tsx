@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { chooseAndUploadImage, setNotification, updateMe } from "../../lib/api";
+import { ApiError, chooseAndUploadImage, setNotification, updateMe } from "../../lib/api";
 import { getAutostart, setAutostart } from "../../lib/desktop";
 import type { StringKey } from "../../lib/i18n";
 import { isTauri, openExternal } from "../../lib/platform";
@@ -232,12 +232,38 @@ const EVENTS: { event: string; label: StringKey; hint: StringKey; on: boolean }[
   { event: "access_requests.create", label: "nAccessRequest", hint: "nAccessRequestHint", on: true },
 ];
 
+/** The events a server accepts, read from the error it gives for one it doesn't (older servers know fewer). */
+function acceptedEvents(e: unknown): string[] | null {
+  if (!(e instanceof ApiError) || e.status !== 400 || !e.message.includes("eventType")) return null;
+  const list = [...e.message.matchAll(/"([a-z_]+\.[a-z_]+)"/g)].map((m) => m[1]);
+  return list.length ? list : null;
+}
+
+const acceptedKey = (server: string) => `notes.notificationEvents:${server}`;
+
+function loadAccepted(server: string): string[] | null {
+  try {
+    const list = JSON.parse(localStorage.getItem(acceptedKey(server)) ?? "null");
+    return Array.isArray(list) ? list : null;
+  } catch {
+    return null;
+  }
+}
+
 export function NotificationsPage() {
   const { t } = useSettings();
-  const { me, setMe, flash, onError } = usePage();
+  const { me, setMe, flash, onError, server } = usePage();
   const settings = me.notificationSettings ?? {};
-  const isOn = (e: (typeof EVENTS)[number]) => !!(settings[e.event] ?? e.on);
-  const allOn = EVENTS.every(isOn);
+  // Per channel ({ email, app, … }) on newer servers: the email one is what these switches set.
+  const isOn = (e: (typeof EVENTS)[number]) => {
+    const v = settings[e.event] ?? e.on;
+    return typeof v === "object" ? (v.email ?? Object.values(v).some(Boolean)) : !!v;
+  };
+  /** Events this server knows, once it has told us (null: all of them, as far as we know). */
+  const [accepted, setAccepted] = useState(() => loadAccepted(server));
+  const acceptedRef = useRef(accepted);
+  const events = EVENTS.filter((e) => !accepted || accepted.includes(e.event));
+  const allOn = events.every(isOn);
 
   // Saves run one after another, so quick toggles reach the server in the order they were made.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
@@ -246,21 +272,37 @@ export function NotificationsPage() {
   latest.current = settings;
 
   const change = (on: boolean, event?: string) => {
-    const events = EVENTS.filter((e) => !event || e.event === event).map((e) => e.event);
+    const changed = (event ? EVENTS.filter((e) => e.event === event) : events).map((e) => e.event);
     const before = latest.current;
     const next = { ...before };
-    for (const e of events) next[e] = on;
+    for (const e of changed) next[e] = on;
     latest.current = next;
     setMe({ notificationSettings: next });
     queue.current = queue.current.then(async () => {
       try {
         // One event at a time: Outline needs an event type, there's no "all" call.
-        for (const e of events) await setNotification(on, e);
+        for (const e of changed) {
+          if (acceptedRef.current && !acceptedRef.current.includes(e)) continue;
+          try {
+            await setNotification(on, e);
+          } catch (err) {
+            // Not an event this server has: hide it from now on and carry on with the others.
+            const list = acceptedEvents(err);
+            if (!list || list.includes(e)) throw err;
+            acceptedRef.current = list;
+            setAccepted(list);
+            try {
+              localStorage.setItem(acceptedKey(server), JSON.stringify(list));
+            } catch {
+              // Found again next time.
+            }
+          }
+        }
         flash(t("saved"));
       } catch (err) {
         // Put back what didn't save.
         const reverted = { ...latest.current };
-        for (const e of events) {
+        for (const e of changed) {
           if (e in before) reverted[e] = before[e];
           else delete reverted[e];
         }
@@ -278,7 +320,7 @@ export function NotificationsPage() {
         <Row label={<strong>{t("allNotifications")}</strong>}>
           <Switch checked={allOn} onChange={(on) => change(on)} />
         </Row>
-        {EVENTS.map((e) => (
+        {events.map((e) => (
           <Row key={e.event} label={t(e.label)} hint={t(e.hint)}>
             <Switch checked={isOn(e)} onChange={(on) => change(on, e.event)} />
           </Row>
