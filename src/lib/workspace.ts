@@ -2,7 +2,7 @@
 // slow refresh as a safety net.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { collectionTree, listCollections, listSharedWithMe, listStars, type Collection, type Doc, type NavNode, type Star } from "./api";
+import { ApiError, collectionTree, listCollections, listSharedWithMe, listStars, type Collection, type Doc, type NavNode, type Star } from "./api";
 import { collectionIdsOf, onRealtime } from "./realtime";
 
 const REFRESH_MS = 10 * 60 * 1000;
@@ -23,12 +23,15 @@ export function useWorkspace(onError: (e: unknown) => void) {
   const [loaded, setLoaded] = useState(false);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  /** Collections the user can see. Live events also name ones they can't, e.g. for a guest on a shared page. */
+  const known = useRef(new Set<string>());
 
   const refresh = useCallback(async () => {
     try {
       const [cols, starred, sharedDocs] = await Promise.all([listCollections(), listStars(), listSharedWithMe().catch(() => [] as Doc[])]);
       cols.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
       const treeList = await Promise.all(cols.map((c) => collectionTree(c.id).catch(() => [] as NavNode[])));
+      known.current = new Set(cols.map((c) => c.id));
       setCollections(cols);
       setTrees(Object.fromEntries(cols.map((c, i) => [c.id, treeList[i]])));
       setStars(starred);
@@ -39,11 +42,13 @@ export function useWorkspace(onError: (e: unknown) => void) {
     }
   }, []);
 
-  const refreshCollection = useCallback(async (id: string) => {
+  const refreshCollection = useCallback(async (id: string, quiet = false) => {
     try {
       const tree = await collectionTree(id);
       setTrees((t) => ({ ...t, [id]: tree }));
     } catch (e) {
+      // Background refreshes: losing access to a collection isn't worth an error message.
+      if (quiet && e instanceof ApiError && (e.status === 403 || e.status === 404)) return;
       onErrorRef.current(e);
     }
   }, []);
@@ -84,7 +89,7 @@ export function useWorkspace(onError: (e: unknown) => void) {
     const flush = () => {
       timer = undefined;
       if (all) void refresh();
-      else collectionsDirty.forEach((id) => void refreshCollection(id));
+      else collectionsDirty.forEach((id) => known.current.has(id) && void refreshCollection(id, true));
       if (stars && !all) void refreshStars();
       collectionsDirty = new Set();
       all = stars = false;
