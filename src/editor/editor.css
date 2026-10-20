@@ -883,7 +883,8 @@ button.doc-icon:hover {
 
 .block-handle {
   position: fixed;
-  z-index: 40;
+  /* Below dialogs (.dialog-backdrop is 40). */
+  z-index: 39;
   display: flex;
   gap: 1px;
   animation: popover-in 90ms ease-out;

@@ -98,6 +98,8 @@ export function BlockHandle({ view, state, t, docUrl }: Props) {
       frame = requestAnimationFrame(() => {
         if (view.isDestroyed || draggingRef.current) return;
         if (e.target instanceof Node && handleRef.current?.contains(e.target)) return;
+        // A dialog or the mobile sidebar is open over the page: nothing underneath can be dragged.
+        if (e.target instanceof Element && e.target.closest(".dialog-backdrop, .drawer-backdrop")) return setHover(null);
         const box = view.dom.getBoundingClientRect();
         const near = e.clientX > box.left - 90 && e.clientX < box.right + 24 && e.clientY > box.top - 4 && e.clientY < box.bottom + 4;
         setHover(near ? blockAt(view, e.clientX, e.clientY) : null);
