@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { authInfo, can, type Envelope, type Team, type User } from "../lib/api";
 import type { StringKey } from "../lib/i18n";
 import { mod } from "../lib/platform";
@@ -118,17 +118,21 @@ export function SettingsDialog(p: Props) {
   const { t } = useSettings();
   const [page, setPage] = useState<SettingsPage>(p.page ?? "preferences");
   const [auth, setAuth] = useState<{ me: User; team: Team; policies: Envelope<unknown> } | null>(null);
-  const { onClose, onError } = p;
+  const { onClose } = p;
+  const pRef = useRef(p);
+  pRef.current = p;
 
+  // Once, when the settings open. Fetching again (e.g. because a handler changed identity) would
+  // overwrite changes that are still being saved, like a notification switch just flipped.
   useEffect(() => {
     authInfo().then(
       (res) => setAuth({ me: res.data.user, team: res.data.team, policies: res }),
       (e) => {
-        onError(e);
-        onClose();
+        pRef.current.onError(e);
+        pRef.current.onClose();
       },
     );
-  }, [onClose, onError]);
+  }, []);
 
   useEffect(() => {
     // Escape closes the settings, unless a dialog or menu on top of them handles it first.

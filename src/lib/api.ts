@@ -784,9 +784,9 @@ export const listShares = (query = "") =>
 export const updateMe = (patch: { name?: string; avatarUrl?: string | null; language?: string; preferences?: Record<string, unknown> }) =>
   call<User>("users.update", patch).then((r) => r.data);
 
-/** Turns one kind of notification email on or off; without an event, all of them. */
-export const setNotification = (on: boolean, eventType?: string) =>
-  call(on ? "users.notificationsSubscribe" : "users.notificationsUnsubscribe", eventType ? { eventType } : {});
+/** Turns one kind of notification email on or off. */
+export const setNotification = (on: boolean, eventType: string) =>
+  call(on ? "users.notificationsSubscribe" : "users.notificationsUnsubscribe", { eventType });
 
 // ---------- Notifications ----------
 

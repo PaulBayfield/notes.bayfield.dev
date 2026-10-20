@@ -58,6 +58,13 @@ function Root() {
       });
   }, []);
   useEffect(restore, [restore]);
+  // Stable, so updating the user doesn't re-run everything that depends on these.
+  const onUserChange = useCallback((patch: Partial<User>) => setSession((s) => s && { ...s, user: { ...s.user, ...patch } }), []);
+  const onTeamChange = useCallback((team: Team) => setSession((s) => s && { ...s, team }), []);
+  const onSignedOut = useCallback(() => {
+    setSession(null);
+    setStatus("signedOut");
+  }, []);
   // The editor follows the user's smart text preference, kept in Outline.
   const userPreferences = session?.user.preferences;
   useEffect(() => setSmartText(userPreferences), [userPreferences]);
@@ -78,12 +85,9 @@ function Root() {
   return (
     <NotesApp
       session={session}
-      onUserChange={(patch) => setSession((s) => s && { ...s, user: { ...s.user, ...patch } })}
-      onTeamChange={(team) => setSession((s) => s && { ...s, team })}
-      onSignedOut={() => {
-        setSession(null);
-        setStatus("signedOut");
-      }}
+      onUserChange={onUserChange}
+      onTeamChange={onTeamChange}
+      onSignedOut={onSignedOut}
     />
   );
 }

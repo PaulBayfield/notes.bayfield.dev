@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { chooseAndUploadImage, setNotification, updateMe } from "../../lib/api";
 import { getAutostart, setAutostart } from "../../lib/desktop";
 import type { StringKey } from "../../lib/i18n";
@@ -239,11 +239,36 @@ export function NotificationsPage() {
   const isOn = (e: (typeof EVENTS)[number]) => !!(settings[e.event] ?? e.on);
   const allOn = EVENTS.every(isOn);
 
+  // Saves run one after another, so quick toggles reach the server in the order they were made.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  // The latest settings, for changes made before the previous one re-rendered the page.
+  const latest = useRef(settings);
+  latest.current = settings;
+
   const change = (on: boolean, event?: string) => {
-    const next = { ...settings };
-    for (const e of EVENTS) if (!event || e.event === event) next[e.event] = on;
+    const events = EVENTS.filter((e) => !event || e.event === event).map((e) => e.event);
+    const before = latest.current;
+    const next = { ...before };
+    for (const e of events) next[e] = on;
+    latest.current = next;
     setMe({ notificationSettings: next });
-    setNotification(on, event).then(() => flash(t("saved")), onError);
+    queue.current = queue.current.then(async () => {
+      try {
+        // One event at a time: Outline needs an event type, there's no "all" call.
+        for (const e of events) await setNotification(on, e);
+        flash(t("saved"));
+      } catch (err) {
+        // Put back what didn't save.
+        const reverted = { ...latest.current };
+        for (const e of events) {
+          if (e in before) reverted[e] = before[e];
+          else delete reverted[e];
+        }
+        latest.current = reverted;
+        setMe({ notificationSettings: reverted });
+        onError(err);
+      }
+    });
   };
 
   return (
