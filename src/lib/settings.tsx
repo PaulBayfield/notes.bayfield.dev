@@ -31,6 +31,24 @@ export interface Settings {
   startMinimized: boolean;
   /** A new version the user chose not to be told about again. */
   skippedUpdate: string;
+  /** The server (origin) that `lastPath`, `expanded` and `folded` belong to. */
+  activeServer: string;
+  /** Those settings for the other servers, kept while another one is in use. */
+  servers: Record<string, ServerSettings>;
+}
+
+/** Settings that only make sense on one server: they name its pages and collections. */
+export type ServerSettings = Pick<Settings, "lastPath" | "expanded" | "folded">;
+
+/** Puts away the current server's own settings and brings back `server`'s. */
+export function forServer(s: Settings, server: string): Partial<Settings> {
+  if (s.activeServer === server) return {};
+  // First run with this setting: what's there belongs to the server in use.
+  if (!s.activeServer) return { activeServer: server };
+  const servers = { ...s.servers, [s.activeServer]: { lastPath: s.lastPath, expanded: s.expanded, folded: s.folded } };
+  const next = servers[server] ?? { lastPath: "", expanded: [], folded: [] };
+  delete servers[server];
+  return { ...next, servers, activeServer: server };
 }
 
 const STORAGE_KEY = "notes.settings";
@@ -52,6 +70,8 @@ const DEFAULTS: Settings = {
   closeToTray: true,
   startMinimized: true,
   skippedUpdate: "",
+  activeServer: "",
+  servers: {},
 };
 
 function load(): Settings {

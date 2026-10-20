@@ -5,7 +5,9 @@ import { refreshCollaborationToken, restoreSession, signOut, type Session } from
 import { isMac, isTauri, openExternal } from "./lib/platform";
 import { useUpdateCheck } from "./lib/updates";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
-import { SettingsProvider, useSettings } from "./lib/settings";
+import { SettingsProvider, forServer, useSettings } from "./lib/settings";
+import { rememberAccount } from "./lib/accounts";
+import { WorkspaceDialog } from "./components/WorkspaceDialog";
 import { clearTray, useDesktopSync, useTrayRecents } from "./lib/desktop";
 import { MOBILE_QUERY, useMediaQuery } from "./lib/useMediaQuery";
 import { useWorkspace } from "./lib/workspace";
@@ -40,15 +42,19 @@ export default function App() {
 type Status = "loading" | "signedOut" | "ready" | "unreachable";
 
 function Root() {
-  const { t } = useSettings();
+  const { t, update } = useSettings();
   const [status, setStatus] = useState<Status>("loading");
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Signing in to another workspace while staying signed in to this one. */
+  const [adding, setAdding] = useState<{ server?: string } | null>(null);
 
   const restore = useCallback(() => {
     setStatus("loading");
     restoreSession()
       .then((s) => {
+        // Same render as the app's first: it opens on this server's last page.
+        if (s) update((prev) => forServer(prev, s.server));
         setSession(s);
         setStatus(s ? "ready" : "signedOut");
       })
@@ -56,8 +62,13 @@ function Root() {
         setError(e instanceof Error ? e.message : String(e));
         setStatus("unreachable");
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(restore, [restore]);
+  // The workspace list shows each one's current name, logo and account.
+  useEffect(() => {
+    if (session) rememberAccount(session);
+  }, [session?.server, session?.team.name, session?.team.avatarUrl, session?.user.name, session?.user.email]);
   // Stable, so updating the user doesn't re-run everything that depends on these.
   const onUserChange = useCallback((patch: Partial<User>) => setSession((s) => s && { ...s, user: { ...s.user, ...patch } }), []);
   const onTeamChange = useCallback((team: Team) => setSession((s) => s && { ...s, team }), []);
@@ -65,6 +76,7 @@ function Root() {
     setSession(null);
     setStatus("signedOut");
   }, []);
+  const onAddWorkspace = useCallback((server?: string) => setAdding({ server }), []);
   // The editor follows the user's smart text preference, kept in Outline.
   const userPreferences = session?.user.preferences;
   useEffect(() => setSmartText(userPreferences), [userPreferences]);
@@ -78,17 +90,27 @@ function Root() {
           <button className="primary-button" onClick={restore}>
             {t("retry")}
           </button>
+          {/* The server may be gone for good: other workspaces are still reachable. */}
+          {isTauri && (
+            <button className="link-button" onClick={() => setStatus("signedOut")}>
+              {t("switchWorkspace")}
+            </button>
+          )}
         </div>
       </div>
     );
   if (status === "signedOut" || !session) return <SignIn error={error} onSignedIn={restore} />;
   return (
-    <NotesApp
-      session={session}
-      onUserChange={onUserChange}
-      onTeamChange={onTeamChange}
-      onSignedOut={onSignedOut}
-    />
+    <>
+      <NotesApp session={session} onUserChange={onUserChange} onTeamChange={onTeamChange} onSignedOut={onSignedOut} onAddWorkspace={onAddWorkspace} />
+      {/* Over the app, so cancelling leaves it as it was. Once signed in, start over on the new
+          workspace so nothing from this one carries over. */}
+      {adding && (
+        <div className="signin-overlay">
+          <SignIn error={null} current={session.server} start={adding.server} onSignedIn={() => location.reload()} onCancel={() => setAdding(null)} />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -98,11 +120,13 @@ function NotesApp({
   onSignedOut,
   onUserChange,
   onTeamChange,
+  onAddWorkspace,
 }: {
   session: Session;
   onSignedOut: () => void;
   onUserChange: (patch: Partial<User>) => void;
   onTeamChange: (team: Team) => void;
+  onAddWorkspace: (server?: string) => void;
 }) {
   const { t, settings, update } = useSettings();
   const mobile = useMediaQuery(MOBILE_QUERY);
@@ -111,6 +135,7 @@ function NotesApp({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; undo?: () => void; label?: string } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [workspacesOpen, setWorkspacesOpen] = useState(false);
   /** The open settings page, if any. */
   const [settingsOpen, setSettingsOpen] = useState<SettingsPage | true | false>(false);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
@@ -440,7 +465,7 @@ function NotesApp({
           onMoveCollection={(id, index) => void reorderCollection(id, index)}
           onNewCollection={actions.newCollection}
           team={session.team}
-          onOpenWorkspace={() => setSettingsOpen("details")}
+          onOpenWorkspace={() => setWorkspacesOpen(true)}
           onCollectionMenu={(c, e) => setMenu({ x: e.clientX, y: e.clientY, items: actions.collectionMenu(c) })}
         />
       )}
@@ -621,6 +646,25 @@ function NotesApp({
             go({ name: "doc", id: doc.id });
           }}
           onClose={() => setSearchOpen(false)}
+        />
+      )}
+      {workspacesOpen && (
+        <WorkspaceDialog
+          session={session}
+          onClose={() => setWorkspacesOpen(false)}
+          onOpenSettings={() => {
+            setWorkspacesOpen(false);
+            setSettingsOpen("details");
+          }}
+          onAdd={(server) => {
+            setWorkspacesOpen(false);
+            onAddWorkspace(server);
+          }}
+          onSignOut={() => {
+            setWorkspacesOpen(false);
+            doSignOut();
+          }}
+          onError={onError}
         />
       )}
       {settingsOpen && (

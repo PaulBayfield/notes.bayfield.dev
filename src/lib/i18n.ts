@@ -580,6 +580,18 @@ const en = {
   shareDocument: "Share “{title}”",
   mentionPeople: "People",
   mentionDates: "Date",
+  workspaces: "Workspaces",
+  workspaceSettings: "Workspace settings",
+  addWorkspace: "Add workspace",
+  currentWorkspace: "Current",
+  signedOutWorkspace: "Signed out",
+  removeWorkspace: "Remove from this list",
+  recentServers: "Recent workspaces",
+  otherServer: "Or another server",
+  switchWorkspace: "Switch workspace",
+  switching: "Switching…",
+  signOutOf: "Sign out of {name}",
+  workspacesHint: "Each workspace keeps its own sign-in on this device.",
 };
 
 export type StringKey = keyof typeof en;
@@ -1160,6 +1172,18 @@ const fr: Record<StringKey, string> = {
   shareDocument: "Partager « {title} »",
   mentionPeople: "Personnes",
   mentionDates: "Date",
+  workspaces: "Espaces",
+  workspaceSettings: "Paramètres de l'espace",
+  addWorkspace: "Ajouter un espace",
+  currentWorkspace: "Actuel",
+  signedOutWorkspace: "Déconnecté",
+  removeWorkspace: "Retirer de la liste",
+  recentServers: "Espaces récents",
+  otherServer: "Ou un autre serveur",
+  switchWorkspace: "Changer d'espace",
+  switching: "Changement…",
+  signOutOf: "Se déconnecter de {name}",
+  workspacesHint: "Chaque espace garde sa propre connexion sur cet appareil.",
 };
 
 const strings: Record<Lang, Record<StringKey, string>> = { en, fr };

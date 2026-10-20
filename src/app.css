@@ -589,6 +589,90 @@ body.resizing {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+/* ---------- Workspaces ---------- */
+
+/* Adding a workspace: the sign-in page, over the app. */
+.signin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--bg);
+}
+.signin-section {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+}
+.workspace-list {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 16px;
+}
+.signin-form .workspace-list {
+  margin: 0 0 6px;
+}
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+}
+.workspace-item:hover:not(.current) {
+  background: var(--hover);
+}
+.workspace-item.current {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.workspace-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  text-align: left;
+  border-radius: 8px;
+}
+.workspace-item .icon-button {
+  margin-right: 6px;
+  opacity: 0;
+}
+.workspace-item:hover .icon-button,
+.workspace-item.current .icon-button,
+.workspace-item .icon-button:focus-visible {
+  opacity: 1;
+}
+.workspace-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.workspace-name,
+.workspace-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-name {
+  font-weight: 500;
+}
+.workspace-host {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.workspace-actions .primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Touch screens have no hover: keep the remove buttons visible. */
+@media (hover: none) {
+  .workspace-item .icon-button {
+    opacity: 1;
+  }
+}
+
 .signin-option {
   display: flex;
   align-items: center;

@@ -77,13 +77,87 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-fn keyring_entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(err)
+// ---------- Saved sessions ----------
+//
+// One credential per server (the store limits each one's size, so they aren't kept together),
+// plus a small index of which servers have one and which is in use.
+
+/// The index of saved sessions.
+const KEYRING_INDEX: &str = "outline-sessions";
+
+#[derive(Default, Serialize, Deserialize)]
+struct SessionIndex {
+    /// The server in use, if signed in.
+    active: Option<String>,
+    /// Servers with a saved session.
+    servers: Vec<String>,
+}
+
+fn keyring_entry(user: &str) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, user).map_err(err)
+}
+
+fn session_entry(server: &str) -> Result<keyring::Entry, String> {
+    keyring_entry(&format!("{KEYRING_USER} {server}"))
+}
+
+fn read_index() -> SessionIndex {
+    keyring_entry(KEYRING_INDEX)
+        .ok()
+        .and_then(|e| e.get_password().ok())
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+fn write_index(index: &SessionIndex) -> Result<(), String> {
+    keyring_entry(KEYRING_INDEX)?
+        .set_password(&serde_json::to_string(index).map_err(err)?)
+        .map_err(err)
+}
+
+fn read_saved(server: &str) -> Option<Session> {
+    let raw = session_entry(server).ok()?.get_password().ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// Saves a session and makes it the one in use.
+fn save_session(session: &Session) -> Result<(), String> {
+    session_entry(&session.server)?
+        .set_password(&serde_json::to_string(session).map_err(err)?)
+        .map_err(err)?;
+    let mut index = read_index();
+    if !index.servers.contains(&session.server) {
+        index.servers.push(session.server.clone());
+    }
+    index.active = Some(session.server.clone());
+    write_index(&index)
+}
+
+/// Deletes a server's saved session (and stops using it, if it was the one in use).
+fn forget_saved(server: &str) -> Result<(), String> {
+    let mut index = read_index();
+    index.servers.retain(|s| s != server);
+    if index.active.as_deref() == Some(server) {
+        index.active = None;
+    }
+    write_index(&index)?;
+    match session_entry(server)?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(err(e)),
+    }
 }
 
 fn load_session() -> Option<Session> {
-    let raw = keyring_entry().ok()?.get_password().ok()?;
-    serde_json::from_str(&raw).ok()
+    // Before several servers: one session under KEYRING_USER. Moved to the new layout once.
+    if let Ok(legacy) = keyring_entry(KEYRING_USER) {
+        if let Some(session) = legacy.get_password().ok().and_then(|raw| serde_json::from_str::<Session>(&raw).ok()) {
+            if save_session(&session).is_ok() {
+                let _ = legacy.delete_credential();
+            }
+            return Some(session);
+        }
+    }
+    read_saved(&read_index().active?)
 }
 
 /// `notes.bayfield.dev/` → `https://notes.bayfield.dev`
@@ -216,16 +290,47 @@ fn sign_in_with_browser(app: AppHandle, state: tauri::State<AppState>, server: S
     app.opener().open_url(url.as_str(), None::<&str>).map_err(err)
 }
 
-/// Forgets the session on this device only. (Outline's `auth.delete` would sign the user out
-/// everywhere, browser included, so it isn't called.)
+/// Forgets the current server's session on this device only; other servers stay signed in.
+/// (Outline's `auth.delete` would sign the user out everywhere, browser included, so it isn't called.)
 #[tauri::command]
 fn sign_out(app: AppHandle, state: tauri::State<AppState>) -> Result<(), String> {
-    *state.session.write().map_err(err)? = None;
+    let current = state.session.write().map_err(err)?.take();
     restart_realtime(&app);
-    match keyring_entry()?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(err(e)),
+    match current {
+        Some(session) => forget_saved(&session.server),
+        None => Ok(()),
     }
+}
+
+/// Servers this device has a session for, the current one included.
+#[tauri::command]
+fn saved_sessions() -> Vec<String> {
+    read_index().servers
+}
+
+/// Uses another server's saved session. The webview reloads afterwards.
+#[tauri::command]
+fn switch_session(app: AppHandle, state: tauri::State<AppState>, server: String) -> Result<(), String> {
+    let server = normalize_server(&server)?;
+    let session = read_saved(&server).ok_or("Signed out of that workspace. Sign in again.")?;
+    let mut index = read_index();
+    index.active = Some(server);
+    write_index(&index)?;
+    *state.session.write().map_err(err)? = Some(session);
+    restart_realtime(&app);
+    Ok(())
+}
+
+/// Deletes another server's saved session (removing it from the workspace list).
+#[tauri::command]
+fn forget_session(app: AppHandle, state: tauri::State<AppState>, server: String) -> Result<(), String> {
+    let server = normalize_server(&server)?;
+    let is_current = state.session.read().map_err(err)?.as_ref().is_some_and(|s| s.server == server);
+    if is_current {
+        *state.session.write().map_err(err)? = None;
+        restart_realtime(&app);
+    }
+    forget_saved(&server)
 }
 
 /// Swaps a transfer token for a session token.
@@ -260,9 +365,7 @@ async fn exchange_token(app: &AppHandle, token: &str) -> Result<(), String> {
         .ok_or("Outline didn't accept the sign-in link (it can only be used once and expires quickly). Try again.")?;
 
     let session = Session { server, token: session_token };
-    keyring_entry()?
-        .set_password(&serde_json::to_string(&session).map_err(err)?)
-        .map_err(err)?;
+    save_session(&session)?;
     *state.session.write().map_err(err)? = Some(session);
     *state.pending.lock().map_err(err)? = None;
     Ok(())
@@ -684,6 +787,9 @@ pub fn run() {
             sign_in,
             sign_in_with_browser,
             sign_out,
+            saved_sessions,
+            switch_session,
+            forget_session,
             save_file,
             download,
             pick_files,
