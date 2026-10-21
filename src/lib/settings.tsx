@@ -117,6 +117,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const resolvedTheme = settings.theme === "system" ? (systemDark ? "dark" : "light") : settings.theme;
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme;
+    // Match the installed app's title bar to the theme.
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    if (bg) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
   }, [resolvedTheme]);
 
   const value = useMemo<SettingsContextValue>(() => {
