@@ -1137,21 +1137,44 @@ body.resizing {
   color: var(--text);
   font-weight: 500;
 }
-.emoji-grid {
-  max-height: 240px;
+.emoji-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.emoji-tabs {
+  display: flex;
+  gap: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.emoji-tab {
+  flex: 1;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font-size: 17px;
+  line-height: 1;
+  opacity: 0.6;
+}
+.emoji-tab:hover {
+  background: var(--hover);
+  opacity: 1;
+}
+.emoji-tab.active {
+  background: var(--active);
+  opacity: 1;
+}
+/* A fixed height, so switching categories doesn't make the dialog jump. */
+.emoji-picker-grid {
+  height: 240px;
+  max-height: none;
+  align-content: start;
 }
 .emoji-cell {
   font-size: 20px;
   line-height: 1;
-}
-.emoji-category {
-  grid-column: 1 / -1;
-  padding: 8px 4px 2px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
 }
 .emoji-empty {
   grid-column: 1 / -1;

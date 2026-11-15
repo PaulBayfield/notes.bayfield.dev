@@ -14,8 +14,7 @@ export function loadEmoji(): Promise<Record<string, string>> {
     const map: Record<string, string> = {};
     const emojis = (data as { emojis: Record<string, { id: string; skins: { native: string }[] }> }).emojis;
     for (const emoji of Object.values(emojis)) {
-      const id = emoji.id.replace(/(\w)-(\w)/g, "$1_$2");
-      map[RENAMED[id] ?? id] = emoji.skins[0].native;
+      map[shortcodeOf(emoji.id)] = emoji.skins[0].native;
     }
     table = map;
     return map;
@@ -50,9 +49,23 @@ export async function searchEmoji(query: string, limit = 8): Promise<{ name: str
   return out;
 }
 
+export interface CatalogEmoji {
+  native: string;
+  name: string;
+  /** The name Outline stores in an emoji node. */
+  shortcode: string;
+  search: string;
+}
+
 export interface EmojiCategory {
   id: string;
-  emojis: { native: string; name: string; search: string }[];
+  emojis: CatalogEmoji[];
+}
+
+/** emoji-mart id → Outline's shortcode ("thumbs-up" → "thumbs_up", "+1" → "thumbs_up"). */
+function shortcodeOf(id: string): string {
+  const name = id.replace(/(\w)-(\w)/g, "$1_$2");
+  return RENAMED[name] ?? name;
 }
 
 let catalog: Promise<EmojiCategory[]> | null = null;
@@ -68,7 +81,7 @@ export function loadEmojiCatalog(): Promise<EmojiCategory[]> {
       id: c.id,
       emojis: c.emojis.flatMap((id) => {
         const e = d.emojis[id];
-        return e ? [{ native: e.skins[0].native, name: e.name, search: [e.id, e.name, ...(e.keywords ?? [])].join(" ").toLowerCase() }] : [];
+        return e ? [{ native: e.skins[0].native, name: e.name, shortcode: shortcodeOf(e.id), search: [e.id, e.name, ...(e.keywords ?? [])].join(" ").toLowerCase() }] : [];
       }),
     }));
   });
