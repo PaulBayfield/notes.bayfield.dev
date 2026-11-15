@@ -59,6 +59,9 @@ interface Props {
 
 type StarredItem = { kind: "doc"; star: StarRecord; doc: Doc } | { kind: "collection"; star: StarRecord; collection: Collection };
 
+/** Prefix for the open/closed state of trees under Starred, kept apart from the collections'. */
+const STAR_FOLD = "star:";
+
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 480;
 const SIDEBAR_DEFAULT = 248;
@@ -76,6 +79,9 @@ export function Sidebar(p: Props) {
   const folded = new Set(settings.folded);
   const toggleFold = (key: string) =>
     update((s) => ({ folded: s.folded.includes(key) ? s.folded.filter((k) => k !== key) : [...s.folded, key] }));
+  const expanded = new Set(settings.expanded);
+  const toggleExpanded = (key: string) =>
+    update((s) => ({ expanded: s.expanded.includes(key) ? s.expanded.filter((k) => k !== key) : [...s.expanded, key] }));
   const isActive = (id: string) => p.activeDocId === id || (p.route.name === "doc" && p.route.id === id);
 
   const [drag, setDrag] = useState<Dragged | null>(null);
@@ -239,38 +245,71 @@ export function Sidebar(p: Props) {
               </span>
             </button>
             {!folded.has("starred") &&
-              starred.map((s) =>
-                s.kind === "collection" ? (
+              starred.map((s) => {
+                // Starred items unfold like the collection tree, remembered separately ("star:…").
+                const located = s.kind === "doc" ? workspace.locate(s.doc.id) : null;
+                const children = s.kind === "doc" ? (located?.node.children ?? []) : (workspace.trees[s.collection.id] ?? []);
+                const collectionId = s.kind === "doc" ? (located?.collection.id ?? s.doc.collectionId ?? "") : s.collection.id;
+                const id = s.kind === "doc" ? s.doc.id : s.collection.id;
+                const open = expanded.has(STAR_FOLD + id) && children.length > 0;
+                const chevron = children.length ? (
                   <button
-                    key={s.star.id}
-                    className={`tree-row${p.route.name === "collection" && p.route.id === s.collection.id ? " active" : ""}`}
-                    style={{ "--depth": 0, "--c": s.collection.color ?? "var(--primary)" } as CSSProperties}
-                    onClick={() => p.onNavigate({ name: "collection", id: s.collection.id })}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      p.onCollectionMenu(s.collection, e);
+                    className={`tree-chevron${open ? " open" : ""}`}
+                    aria-label={open ? "Collapse" : "Expand"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpanded(STAR_FOLD + id);
                     }}
                   >
-                    <span className="tree-chevron-space" />
-                    <span className="tree-icon">
-                      <EntityIcon icon={s.collection.icon} color={s.collection.color} size={18} fallback={<span className="collection-dot" />} />
-                    </span>
-                    <span className="tree-title">{s.collection.name}</span>
+                    <ChevronRight size={12} />
                   </button>
                 ) : (
-                  <button
-                    key={s.star.id}
-                    className={`tree-row${isActive(s.doc.id) ? " active" : ""}`}
-                    style={{ "--depth": 0 } as CSSProperties}
-                    onClick={() => p.onNavigate({ name: "doc", id: s.doc.id })}
-                    onContextMenu={(e) => s.doc.collectionId && p.onContextMenu({ id: s.doc.id, title: s.doc.title, url: s.doc.url, collectionId: s.doc.collectionId }, e)}
-                  >
-                    <span className="tree-chevron-space" />
-                    <DocIcon icon={s.doc.icon} color={s.doc.color} starred />
-                    <span className="tree-title">{s.doc.title || t("untitled")}</span>
-                  </button>
-                ),
-              )}
+                  <span className="tree-chevron-space" />
+                );
+                return (
+                  <div key={s.star.id} role="treeitem" aria-expanded={children.length ? open : undefined}>
+                    {s.kind === "collection" ? (
+                      <div
+                        className={`tree-row${p.route.name === "collection" && p.route.id === s.collection.id ? " active" : ""}`}
+                        style={{ "--depth": 0, "--c": s.collection.color ?? "var(--primary)" } as CSSProperties}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => p.onNavigate({ name: "collection", id: s.collection.id })}
+                        onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "collection", id: s.collection.id })}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          p.onCollectionMenu(s.collection, e);
+                        }}
+                      >
+                        {chevron}
+                        <span className="tree-icon">
+                          <EntityIcon icon={s.collection.icon} color={s.collection.color} size={18} fallback={<span className="collection-dot" />} />
+                        </span>
+                        <span className="tree-title">{s.collection.name}</span>
+                      </div>
+                    ) : (
+                      <div
+                        className={`tree-row${isActive(s.doc.id) ? " active" : ""}`}
+                        style={{ "--depth": 0 } as CSSProperties}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => p.onNavigate({ name: "doc", id: s.doc.id })}
+                        onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "doc", id: s.doc.id })}
+                        onContextMenu={(e) => s.doc.collectionId && p.onContextMenu({ id: s.doc.id, title: s.doc.title, url: s.doc.url, collectionId: s.doc.collectionId }, e)}
+                      >
+                        {chevron}
+                        <DocIcon icon={s.doc.icon} color={s.doc.color} starred />
+                        <span className="tree-title">{s.doc.title || t("untitled")}</span>
+                      </div>
+                    )}
+                    {open && (
+                      <div role="group">
+                        <DocTree {...p} nodes={children} depth={1} collectionId={collectionId} isActive={isActive} dnd={dnd} foldPrefix={STAR_FOLD} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </section>
         )}
         <section className="tree-group">
@@ -320,72 +359,13 @@ interface BlockProps extends Props {
 }
 
 function CollectionBlock(p: BlockProps) {
-  const { t, settings, update } = useSettings();
+  const { t } = useSettings();
   const { collection } = p;
   const nodes = p.workspace.trees[collection.id] ?? [];
-  const expanded = new Set(settings.expanded);
-  const toggle = (id: string) =>
-    update((s) => ({ expanded: s.expanded.includes(id) ? s.expanded.filter((k) => k !== id) : [...s.expanded, id] }));
   const active = p.route.name === "collection" && p.route.id === collection.id;
-  const dropClass = (id: string) => {
-    const d = p.dnd.drop;
-    return d?.kind === "doc" && d.id === id ? ` drop-${d.zone}` : "";
-  };
   const d = p.dnd.drop;
   const collectionDrop =
     d?.kind === "collection" && d.id === collection.id ? " drop-inside" : d?.kind === "collection-order" && d.id === collection.id ? ` drop-${d.zone}` : "";
-
-  const renderNodes = (list: NavNode[], depth: number) =>
-    list.map((node) => {
-      const open = expanded.has(node.id);
-      return (
-        <div key={node.id} role="treeitem" aria-expanded={node.children.length ? open : undefined}>
-          <div
-            className={`tree-row${p.isActive(node.id) ? " active" : ""}${dropClass(node.id)}${p.dnd.drag?.id === node.id ? " dragging" : ""}`}
-            style={{ "--depth": depth } as CSSProperties}
-            role="button"
-            tabIndex={0}
-            draggable
-            onDragStart={(e) => p.dnd.start({ kind: "doc", id: node.id }, e)}
-            onDragOver={(e) => p.dnd.over({ kind: "doc", id: node.id, zone: zoneOf(e) }, e)}
-            onDrop={p.dnd.finish}
-            onDragEnd={p.dnd.end}
-            onClick={() => p.onNavigate({ name: "doc", id: node.id })}
-            onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "doc", id: node.id })}
-            onContextMenu={(e) => p.onContextMenu({ id: node.id, title: node.title, url: node.url, collectionId: collection.id }, e)}
-          >
-            {node.children.length ? (
-              <button
-                className={`tree-chevron${open ? " open" : ""}`}
-                aria-label={open ? "Collapse" : "Expand"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggle(node.id);
-                }}
-              >
-                <ChevronRight size={12} />
-              </button>
-            ) : (
-              <span className="tree-chevron-space" />
-            )}
-            <DocIcon icon={node.icon} color={node.color} />
-            <span className="tree-title">{node.title || t("untitled")}</span>
-            <button
-              className="tree-add"
-              title={t("newChild")}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!open) toggle(node.id);
-                p.onNewDoc(collection.id, node.id);
-              }}
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-          {open && node.children.length > 0 && <div role="group">{renderNodes(node.children, depth + 1)}</div>}
-        </div>
-      );
-    });
 
   return (
     <div className="collection-block">
@@ -435,7 +415,91 @@ function CollectionBlock(p: BlockProps) {
           <Plus size={14} />
         </button>
       </div>
-      {!p.folded && <div role="tree">{renderNodes(nodes, 1)}</div>}
+      {!p.folded && (
+        <div role="tree">
+          <DocTree {...p} nodes={nodes} depth={1} collectionId={collection.id} />
+        </div>
+      )}
     </div>
   );
+}
+
+interface TreeProps extends Props {
+  nodes: NavNode[];
+  depth: number;
+  collectionId: string;
+  isActive: (id: string) => boolean;
+  dnd: DragState;
+  /** Prefixes the remembered open/closed state, so a tree under Starred folds on its own. */
+  foldPrefix?: string;
+}
+
+/** Documents and, for those that are open, their children. */
+function DocTree(p: TreeProps) {
+  const { t, settings, update } = useSettings();
+  const prefix = p.foldPrefix ?? "";
+  const expanded = new Set(settings.expanded);
+  const toggle = (id: string) => {
+    const key = prefix + id;
+    update((s) => ({ expanded: s.expanded.includes(key) ? s.expanded.filter((k) => k !== key) : [...s.expanded, key] }));
+  };
+  const dropClass = (id: string) => {
+    const d = p.dnd.drop;
+    return d?.kind === "doc" && d.id === id ? ` drop-${d.zone}` : "";
+  };
+
+  return p.nodes.map((node) => {
+    const open = expanded.has(prefix + node.id);
+    return (
+      <div key={node.id} role="treeitem" aria-expanded={node.children.length ? open : undefined}>
+        <div
+          className={`tree-row${p.isActive(node.id) ? " active" : ""}${dropClass(node.id)}${p.dnd.drag?.id === node.id ? " dragging" : ""}`}
+          style={{ "--depth": p.depth } as CSSProperties}
+          role="button"
+          tabIndex={0}
+          draggable
+          onDragStart={(e) => p.dnd.start({ kind: "doc", id: node.id }, e)}
+          onDragOver={(e) => p.dnd.over({ kind: "doc", id: node.id, zone: zoneOf(e) }, e)}
+          onDrop={p.dnd.finish}
+          onDragEnd={p.dnd.end}
+          onClick={() => p.onNavigate({ name: "doc", id: node.id })}
+          onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "doc", id: node.id })}
+          onContextMenu={(e) => p.onContextMenu({ id: node.id, title: node.title, url: node.url, collectionId: p.collectionId }, e)}
+        >
+          {node.children.length ? (
+            <button
+              className={`tree-chevron${open ? " open" : ""}`}
+              aria-label={open ? "Collapse" : "Expand"}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(node.id);
+              }}
+            >
+              <ChevronRight size={12} />
+            </button>
+          ) : (
+            <span className="tree-chevron-space" />
+          )}
+          <DocIcon icon={node.icon} color={node.color} />
+          <span className="tree-title">{node.title || t("untitled")}</span>
+          <button
+            className="tree-add"
+            title={t("newChild")}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!open) toggle(node.id);
+              p.onNewDoc(p.collectionId, node.id);
+            }}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        {open && node.children.length > 0 && (
+          <div role="group">
+            <DocTree {...p} nodes={node.children} depth={p.depth + 1} />
+          </div>
+        )}
+      </div>
+    );
+  });
 }
