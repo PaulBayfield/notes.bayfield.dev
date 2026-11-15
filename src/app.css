@@ -996,19 +996,6 @@ body.resizing {
   left: auto;
   right: calc(100% + 4px);
 }
-/* Bridges the gap to the parent item, so moving across it doesn't leave the menu. */
-.menu.submenu::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 100%;
-  width: 10px;
-}
-.menu.submenu.flip::before {
-  right: auto;
-  left: 100%;
-}
 .menu-toggle {
   display: flex;
   align-items: center;
