@@ -1,5 +1,5 @@
 import { Fragment, type MarkType, type Node, type NodeType } from "prosemirror-model";
-import { NodeSelection, TextSelection, type Command, type EditorState } from "prosemirror-state";
+import { NodeSelection, Selection, TextSelection, type Command, type EditorState } from "prosemirror-state";
 import { setBlockType, toggleMark, wrapIn, lift } from "prosemirror-commands";
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
 import { schema } from "./schema";
@@ -45,18 +45,27 @@ export const toggleList =
     if (!range) return false;
     const parentList = findListAround(state);
     if (parentList && parentList.node.type === listType) return liftListItem(itemType)(state, dispatch);
-    if (parentList && parentList.node.type !== listType) {
-      // Switching between bullet / ordered is a type change; checklists need their own items.
-      const sameItems = itemType === listItemTypeOf(parentList.node.type);
-      if (sameItems) {
-        if (dispatch) dispatch(state.tr.setNodeMarkup(parentList.pos, listType));
-        return true;
-      }
-      const lifted = liftListItem(listItemTypeOf(parentList.node.type))(state, dispatch && ((tr) => dispatch(tr)));
-      return lifted;
-    }
+    if (parentList && parentList.node.type !== listType) return convertList(parentList, listType)(state, dispatch);
     return wrapInList(listType)(state, dispatch);
   };
+
+/**
+ * Turns a whole list into another kind (bullets, numbers, to-dos), keeping its items and what's
+ * nested in them. Items becoming to-dos start unchecked.
+ */
+export function convertList(list: { node: Node; pos: number }, listType: NodeType): Command {
+  return (state, dispatch) => {
+    if (!dispatch) return true;
+    const itemType = listItemTypeOf(listType);
+    const items: Node[] = [];
+    list.node.forEach((item) => items.push(item.type === itemType ? item : itemType.create(null, item.content, item.marks)));
+    const attrs = listType === list.node.type ? list.node.attrs : null;
+    // Same size, so the cursor stays where it was.
+    const tr = state.tr.replaceWith(list.pos, list.pos + list.node.nodeSize, listType.create(attrs, items));
+    dispatch(tr.setSelection(Selection.fromJSON(tr.doc, state.selection.toJSON())).scrollIntoView());
+    return true;
+  };
+}
 
 const listItemTypeOf = (listType: NodeType) => (listType === nodes.checkbox_list ? nodes.checkbox_item : nodes.list_item);
 

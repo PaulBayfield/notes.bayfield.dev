@@ -64,6 +64,15 @@ const TURN_INTO: { kind: TurnInto; label: StringKey; icon: string; keywords: str
   { kind: "toggle", label: "blockToggle", icon: "▸", keywords: "toggle depliable" },
 ];
 
+const LIST_KINDS: TurnInto[] = ["bullet", "ordered", "todo"];
+
+/** The kind of list a list item block belongs to. */
+function listKindAt(state: EditorState, block: Block): TurnInto | null {
+  if (block.node.type !== nodes.list_item && block.node.type !== nodes.checkbox_item) return null;
+  const list = state.doc.resolve(block.pos).parent.type;
+  return list === nodes.checkbox_list ? "todo" : list === nodes.ordered_list ? "ordered" : list === nodes.bullet_list ? "bullet" : null;
+}
+
 const normalize = (s: string) =>
   s
     .normalize("NFD")
@@ -167,8 +176,11 @@ export function BlockHandle({ view, state, t, docUrl }: Props) {
   const items: MenuItem[] = [];
   if (menu) {
     const textual = !menu.node.isAtom;
+    // On a list item, the other kinds of list come first: switching lists is the common case.
+    const list = textual ? listKindAt(view.state, menu) : null;
+    const kinds = list ? [...TURN_INTO.filter((b) => LIST_KINDS.includes(b.kind) && b.kind !== list), ...TURN_INTO.filter((b) => !LIST_KINDS.includes(b.kind))] : TURN_INTO;
     if (textual)
-      TURN_INTO.forEach((b, i) =>
+      kinds.forEach((b, i) =>
         items.push({
           key: b.kind,
           label: t(b.label),

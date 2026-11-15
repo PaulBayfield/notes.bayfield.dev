@@ -386,11 +386,11 @@ export const turnInto =
       case "h3":
         return setBlockType(nodes.heading, { level: +kind[1] })(state, dispatch);
       case "bullet":
-        return inList(nodes.bullet_list) || toggleList(nodes.bullet_list, nodes.list_item)(state, dispatch);
+        return listAround(state)?.node.type === nodes.bullet_list || toggleList(nodes.bullet_list, nodes.list_item)(state, dispatch);
       case "ordered":
-        return inList(nodes.ordered_list) || toggleList(nodes.ordered_list, nodes.list_item)(state, dispatch);
+        return listAround(state)?.node.type === nodes.ordered_list || toggleList(nodes.ordered_list, nodes.list_item)(state, dispatch);
       case "todo":
-        return inList(nodes.checkbox_list) || toggleList(nodes.checkbox_list, nodes.checkbox_item)(state, dispatch);
+        return listAround(state)?.node.type === nodes.checkbox_list || toggleList(nodes.checkbox_list, nodes.checkbox_item)(state, dispatch);
       case "quote":
         return inList(nodes.blockquote) || wrapIn(nodes.blockquote)(state, dispatch);
       case "code":
