@@ -23,6 +23,7 @@ import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
+import { registerEditor } from "./registry";
 import { schema } from "./schema";
 import { suggestPlugin } from "./suggest";
 
@@ -116,7 +117,9 @@ export function StaticEditor(props: Props) {
     });
     setView(v);
     setState(v.state);
+    const unregister = registerEditor({ view: v });
     return () => {
+      unregister();
       v.destroy();
       setView(null);
     };

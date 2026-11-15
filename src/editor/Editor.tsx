@@ -20,6 +20,7 @@ import { schema } from "./schema";
 import { suggestPlugin } from "./suggest";
 import { highlightPlugin } from "./highlight";
 import { startComment } from "./comments";
+import { registerEditor } from "./registry";
 import { findPlugin } from "./find";
 import { mermaidEditingPlugin } from "./mermaid";
 import { headingPrefixPlugin, setHeadingPrefix, type HeadingPrefixStyle } from "./headingPrefix";
@@ -159,6 +160,7 @@ export function Editor(props: Props) {
     uploadRef.current = (files) => editorView && upload(files, editorView.state.selection.from);
 
     let headingTimer: ReturnType<typeof setTimeout> | undefined;
+    let unregister = () => {};
     const reportHeadings = (s: EditorState) => {
       clearTimeout(headingTimer);
       headingTimer = setTimeout(() => !destroyed && p().onHeadings(headingsOf(s)), 250);
@@ -279,6 +281,8 @@ export function Editor(props: Props) {
         },
       });
       viewRef.current = editorView;
+      const view = editorView;
+      unregister = registerEditor({ view, comment: () => comment(view.state, null, view) });
       if (import.meta.env.DEV) (window as unknown as { __view: EditorView }).__view = editorView;
       setView(editorView);
       setState(editorView.state);
@@ -288,6 +292,7 @@ export function Editor(props: Props) {
 
     return () => {
       destroyed = true;
+      unregister();
       clearTimeout(headingTimer);
       provider.off("awarenessChange", onAwareness);
       editorView?.destroy();

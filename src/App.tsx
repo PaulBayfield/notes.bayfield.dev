@@ -23,6 +23,7 @@ import { CollectionView, Home } from "./components/Home";
 import { SearchDialog } from "./components/SearchDialog";
 import { SettingsDialog, type SettingsPage } from "./components/SettingsDialog";
 import { Panel, type PanelTab } from "./components/Panel";
+import { contextMenuFor } from "./components/appContextMenu";
 import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
@@ -395,6 +396,8 @@ function NotesApp({
     else return;
     e.preventDefault();
   };
+  const contextRef = useRef({ t, openDocument: (id: string) => go({ name: "doc", id }) });
+  contextRef.current = { t, openDocument: (id: string) => go({ name: "doc", id }) };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyHandler.current(e);
     // Mouse back/forward buttons.
@@ -404,10 +407,21 @@ function NotesApp({
       else return;
       e.preventDefault();
     };
+    // Our own right-click menu, unless something more specific (the sidebar) already showed one.
+    // Shift + right-click opens the native menu.
+    const onContext = (e: globalThis.MouseEvent) => {
+      if (e.defaultPrevented || e.shiftKey || !(e.target instanceof Element)) return;
+      const items = contextMenuFor(e.target, e.clientX, e.clientY, { ...contextRef.current, back: router.back, forward: router.forward });
+      if (!items?.length) return;
+      e.preventDefault();
+      setMenu({ x: e.clientX, y: e.clientY, items });
+    };
     window.addEventListener("keydown", onKey);
+    window.addEventListener("contextmenu", onContext);
     if (isTauri) window.addEventListener("mouseup", onMouse);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("contextmenu", onContext);
       window.removeEventListener("mouseup", onMouse);
     };
   }, [router]);
