@@ -105,7 +105,9 @@ function blocks(tokens: Token[], i: number, close?: string): [Node[], number] {
     if (close && t.type === close) return [out, i + 1];
     switch (t.type) {
       case "paragraph_open": {
-        out.push(paragraph(inline(tokens[i + 1].children ?? [])));
+        // Outline writes an empty paragraph as a lone backslash.
+        const content = tokens[i + 1].content === "\\" ? [] : inline(tokens[i + 1].children ?? []);
+        out.push(paragraph(content));
         i += 3;
         continue;
       }

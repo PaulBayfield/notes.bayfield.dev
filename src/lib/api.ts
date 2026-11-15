@@ -160,7 +160,7 @@ function csrfHeader(): Record<string, string> {
   return csrf ? { "x-csrf-token": decodeURIComponent(csrf) } : {};
 }
 
-export async function call<T>(method: string, body: object = {}): Promise<Envelope<T>> {
+export async function call<T>(method: string, body: object = {}, extraHeaders?: Record<string, string>): Promise<Envelope<T>> {
   if (isDemo) {
     try {
       return (await demoCall(method, body as Record<string, unknown>)) as Envelope<T>;
@@ -172,6 +172,7 @@ export async function call<T>(method: string, body: object = {}): Promise<Envelo
     "content-type": "application/json",
     accept: "application/json",
     "x-editor-version": EDITOR_VERSION,
+    ...extraHeaders,
   };
   if (!isTauri) Object.assign(headers, csrfHeader());
   let res: Response;
@@ -213,7 +214,12 @@ export const listCollections = () => call<Collection[]>("collections.list", { li
 
 export const collectionTree = (id: string) => call<NavNode[]>("collections.documents", { id }).then((r) => r.data);
 
-export const collectionInfo = (id: string) => call<Collection & { description?: string }>("collections.info", { id });
+/**
+ * API version 3 makes Outline answer the overview as JSON (`data`). Older versions only send
+ * the Markdown `description`, which is lossy: an empty line comes back as a lone backslash, for instance.
+ */
+export const collectionInfo = (id: string) =>
+  call<Collection & { description?: string }>("collections.info", { id }, { "x-api-version": "3" });
 
 export const documentInfo = (id: string) => call<Doc>("documents.info", { id });
 
