@@ -334,8 +334,9 @@ function NotesApp({
         if (!settings.expanded.includes(to.node.id)) update((s) => ({ expanded: [...s.expanded, to.node.id] }));
       } else {
         parentId = to.path[to.path.length - 1]?.id ?? null;
-        // Outline removes the document first, then inserts it at `index` among the siblings.
-        const siblings = (parentId ? to.path[to.path.length - 1].children : workspace.trees[collectionId] ?? []).filter((n) => n.id !== id);
+        // `index` counts the siblings as they are now, the moved document included: when it moves
+        // down under the same parent, Outline subtracts one itself after taking it out.
+        const siblings = parentId ? to.path[to.path.length - 1].children : workspace.trees[collectionId] ?? [];
         const at = siblings.findIndex((n) => n.id === target.id);
         index = at + (target.zone === "after" ? 1 : 0);
       }
