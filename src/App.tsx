@@ -565,6 +565,7 @@ function NotesApp({
             token={token}
             user={session.user}
             autoFocusTitle={freshDocId === route.id}
+            subPages={workspace.locate(route.id)?.node.children ?? []}
             refreshToken={refreshToken}
             onLoaded={(m) => {
               if (!m && reopened.current === route.id) navigate({ name: "home" }, true);

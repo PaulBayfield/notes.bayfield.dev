@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { can, ApiError, documentInfo, updateDocument, type Doc, type User } from "../lib/api";
+import { can, ApiError, documentInfo, updateDocument, type Doc, type NavNode, type User } from "../lib/api";
 import { useSettings } from "../lib/settings";
 import { documentIdsOf, onRealtime } from "../lib/realtime";
 import { EntityIcon } from "./EntityIcon";
 import { Dialog } from "./Dialogs";
 import { COLORS, IconPicker } from "./IconPicker";
-import { Shapes, X } from "./icons";
+import { FileText, Shapes, X } from "./icons";
 import { FindBar } from "./FindBar";
 import { embedsEnabled } from "../lib/docPrefs";
 import type { HeadingPrefixStyle } from "../editor/headingPrefix";
@@ -30,6 +30,8 @@ interface Props {
   user: User;
   /** Focus the title right away (new documents). */
   autoFocusTitle: boolean;
+  /** The document's children in the sidebar tree, listed under it when that's turned on. */
+  subPages: NavNode[];
   refreshToken: () => Promise<string | undefined>;
   onLoaded: (meta: DocMeta | null) => void;
   onTitleChange: (id: string, title: string) => void;
@@ -252,6 +254,20 @@ export function DocumentView(p: Props) {
           onCommentClick={p.onCommentClick}
           viewRef={p.viewRef}
         />
+        {settings.subPages && p.subPages.length > 0 && (
+          <section className="sub-pages">
+            <h2 className="sub-pages-title">{t("subPages")}</h2>
+            {p.subPages.map((n) => (
+              <button key={n.id} className="doc-row" onClick={() => p.onOpenDocument(n.id)}>
+                <span className="doc-row-icon">
+                  <EntityIcon icon={n.icon} color={n.color} size={20} fallback={<FileText size={16} />} />
+                </span>
+                <span className="doc-row-title">{n.title || t("untitled")}</span>
+                {n.children.length > 0 && <span className="doc-row-collection">{n.children.length}</span>}
+              </button>
+            ))}
+          </section>
+        )}
       </article>
     </div>
   );

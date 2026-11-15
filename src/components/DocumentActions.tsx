@@ -99,7 +99,7 @@ type Dialog =
 const UNDO_MS = 6000;
 
 export function useDocumentActions(p: Params) {
-  const { t } = useSettings();
+  const { t, settings, update } = useSettings();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -366,6 +366,12 @@ export function useDocumentActions(p: Params) {
           setEmbedsEnabled(doc.id, on);
           p.reloadDoc();
         },
+      },
+      {
+        kind: "toggle",
+        label: t("showSubPages"),
+        checked: settings.subPages,
+        onChange: (on) => update({ subPages: on }),
       },
       canUpdate && {
         kind: "toggle",

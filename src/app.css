@@ -386,7 +386,13 @@ body.resizing {
 .home-section + .home-section {
   margin-top: 32px;
 }
-.home-section h2 {
+.sub-pages {
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.home-section h2,
+.sub-pages-title {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;

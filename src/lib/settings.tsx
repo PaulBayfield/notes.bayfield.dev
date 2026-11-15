@@ -14,6 +14,8 @@ export interface Settings {
   panel: boolean;
   /** Documents use the full window width instead of a reading column. */
   fullWidth: boolean;
+  /** A document's sub-pages are listed under it. */
+  subPages: boolean;
   font: EditorFont;
   fontSize: number;
   spellcheck: boolean;
@@ -60,6 +62,7 @@ const DEFAULTS: Settings = {
   sidebarWidth: 248,
   panel: false,
   fullWidth: false,
+  subPages: true,
   font: "sans",
   fontSize: 16,
   spellcheck: true,
