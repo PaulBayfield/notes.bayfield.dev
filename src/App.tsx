@@ -25,6 +25,7 @@ import { SettingsDialog, type SettingsPage } from "./components/SettingsDialog";
 import { Panel, type PanelTab } from "./components/Panel";
 import { contextMenuFor } from "./components/appContextMenu";
 import { Tooltips } from "./components/Tooltips";
+import { ErrorStack, useErrors } from "./components/Errors";
 import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
@@ -134,7 +135,7 @@ function NotesApp({
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const errors = useErrors();
   const [toast, setToast] = useState<{ message: string; undo?: () => void; label?: string } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
@@ -163,9 +164,9 @@ function NotesApp({
         void signOut().finally(onSignedOut);
         return;
       }
-      setError(e instanceof Error ? e.message : String(e));
+      errors.push(e instanceof Error ? e.message : String(e));
     },
-    [onSignedOut],
+    [onSignedOut, errors.push],
   );
 
   const workspace = useWorkspace(onError);
@@ -564,14 +565,6 @@ function NotesApp({
             </span>
           </div>
         )}
-        {error && (
-          <div className="banner" role="alert">
-            <span>{error}</span>
-            <button className="link-button" onClick={() => setError(null)}>
-              {t("dismiss")}
-            </button>
-          </div>
-        )}
         {route.name === "doc" ? (
           <DocumentView
             key={route.id}
@@ -701,6 +694,7 @@ function NotesApp({
       )}
       <DatePickerHost />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      <ErrorStack errors={errors.errors} onDismiss={errors.dismiss} />
       <Tooltips />
       {actions.overlay}
       {toast && (
