@@ -388,6 +388,7 @@ body.resizing {
 }
 .sub-pages {
   margin-top: 0;
+  margin-bottom: 64px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
