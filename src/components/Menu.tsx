@@ -22,7 +22,7 @@ function tidy(entries: (MenuEntry | false | null | undefined)[]): MenuEntry[] {
 export const menu = tidy;
 
 /** How long a submenu stays open after the pointer leaves it, so it can be reached diagonally. */
-const SUBMENU_GRACE = 300;
+const SUBMENU_GRACE = 120;
 
 /** A list of menu entries, with submenus that open on hover. */
 export function MenuList({ items, onClose }: { items: MenuEntry[]; onClose: () => void }) {
