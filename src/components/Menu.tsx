@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, Check } from "./icons";
 
 export type MenuEntry =
@@ -21,9 +21,29 @@ function tidy(entries: (MenuEntry | false | null | undefined)[]): MenuEntry[] {
 
 export const menu = tidy;
 
+/** How long a submenu stays open after the pointer leaves it, so it can be reached diagonally. */
+const SUBMENU_GRACE = 300;
+
 /** A list of menu entries, with submenus that open on hover. */
 export function MenuList({ items, onClose }: { items: MenuEntry[]; onClose: () => void }) {
-  const [open, setOpen] = useState<number | null>(null);
+  const [open, setOpenState] = useState<number | null>(null);
+  const openRef = useRef(open);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const setOpenNow = (value: number | null) => {
+    clearTimeout(timer.current);
+    openRef.current = value;
+    setOpenState(value);
+  };
+  /** Opens at once; closing (or switching to another item) waits, in case the pointer is on its way into the submenu. */
+  const setOpen = (next: number | null | ((o: number | null) => number | null)) => {
+    const current = openRef.current;
+    const value = typeof next === "function" ? next(current) : next;
+    if (value === current) return clearTimeout(timer.current);
+    if (current === null) return setOpenNow(value);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOpenNow(value), SUBMENU_GRACE);
+  };
   return (
     <>
       {items.map((item, i) => {
@@ -38,7 +58,7 @@ export function MenuList({ items, onClose }: { items: MenuEntry[]; onClose: () =
         if (item.kind === "submenu")
           return (
             <div key={i} className="menu-sub-anchor" onMouseEnter={() => setOpen(i)} onMouseLeave={() => setOpen((o) => (o === i ? null : o))}>
-              <button className={open === i ? "hover" : ""} onClick={() => setOpen(open === i ? null : i)}>
+              <button className={open === i ? "hover" : ""} onClick={() => setOpenNow(open === i ? null : i)}>
                 <span className="menu-item-icon">{item.icon}</span>
                 <span className="menu-item-label">{item.label}</span>
                 <ChevronRight size={14} />
