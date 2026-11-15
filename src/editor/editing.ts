@@ -236,6 +236,8 @@ export const moveBlock =
       if (!node.isBlock || ["row", "cell", "header_cell"].includes(node.type.spec.tableRole)) continue;
       const parent = $head.node(d - 1);
       const index = $head.index(d - 1);
+      // An item's first line is the item: it moves with what's nested under it.
+      if (index === 0 && (parent.type === nodes.list_item || parent.type === nodes.checkbox_item)) continue;
       const sibling = dir < 0 ? index > 0 && parent.child(index - 1) : index < parent.childCount - 1 && parent.child(index + 1);
       if (!sibling) continue;
       const before = $head.before(d);
