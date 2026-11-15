@@ -502,8 +502,25 @@ body.resizing {
   background: var(--hover);
   color: var(--text);
 }
+/* Nested headings hang off a guide line, like the sidebar tree. */
+.toc-item:not(.top) {
+  margin-left: calc(var(--indent) * 14px);
+  border-radius: 0 6px 6px 0;
+  box-shadow: inset 1px 0 0 var(--border-strong);
+}
+.toc-item.top {
+  color: var(--text);
+  font-weight: 500;
+}
+.toc-item.active {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.toc-item.active:not(.top) {
+  box-shadow: inset 2px 0 0 var(--primary);
+}
 .panel-section {
-  margin-top: 20px;
+  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 8px;
