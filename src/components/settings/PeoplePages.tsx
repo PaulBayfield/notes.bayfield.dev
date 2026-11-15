@@ -133,7 +133,7 @@ export function UsersPage() {
                   </span>
                   <span className="settings-hint">{u.email ?? ""}</span>
                 </div>
-                <span className="settings-item-meta">
+                <span className="settings-item-meta" title={u.lastActiveAt && !u.isSuspended ? f.dateTime(u.lastActiveAt) : undefined}>
                   {u.isSuspended ? t("suspendedTag") : invited ? t("notSignedInYet") : u.lastActiveAt ? f.relative(u.lastActiveAt) : ""}
                 </span>
                 {isAdmin && u.id !== me.id ? (

@@ -24,6 +24,7 @@ import { SearchDialog } from "./components/SearchDialog";
 import { SettingsDialog, type SettingsPage } from "./components/SettingsDialog";
 import { Panel, type PanelTab } from "./components/Panel";
 import { contextMenuFor } from "./components/appContextMenu";
+import { Tooltips } from "./components/Tooltips";
 import { ContextMenu } from "./components/ContextMenu";
 import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
@@ -700,6 +701,7 @@ function NotesApp({
       )}
       <DatePickerHost />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      <Tooltips />
       {actions.overlay}
       {toast && (
         <div className="toast">

@@ -2412,3 +2412,28 @@ textarea.text-field {
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
+
+/* ---------- Tooltips ---------- */
+
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 320px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-line;
+  pointer-events: none;
+  animation: tooltip-in 80ms ease-out;
+}
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}

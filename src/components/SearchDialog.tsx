@@ -114,7 +114,7 @@ export function SearchDialog({ workspace, onPick, onClose }: { workspace: Worksp
                         collection && <span className="search-result-extra">{collection.name}</span>
                       )}
                     </span>
-                    <span className="search-result-when">{f.relative(r.doc.updatedAt)}</span>
+                    <span className="search-result-when" title={f.dateTime(r.doc.updatedAt)}>{f.relative(r.doc.updatedAt)}</span>
                   </button>
                 );
               })}

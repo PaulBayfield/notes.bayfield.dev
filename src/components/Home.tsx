@@ -19,7 +19,7 @@ function DocRow({ doc, workspace, onOpen }: { doc: Pick<Doc, "id" | "title" | "i
       </span>
       <span className="doc-row-title">{doc.title || t("untitled")}</span>
       {collection && <span className="doc-row-collection">{collection.name}</span>}
-      <span className="doc-row-time">{f.relative(doc.updatedAt)}</span>
+      <span className="doc-row-time" title={f.dateTime(doc.updatedAt)}>{f.relative(doc.updatedAt)}</span>
     </button>
   );
 }

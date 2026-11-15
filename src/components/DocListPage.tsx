@@ -100,7 +100,7 @@ export function DocListPage({
                     </span>
                     <span className="doc-row-title">{d.title || t("untitled")}</span>
                     {collection && <span className="doc-row-collection">{collection.name}</span>}
-                    {when && <span className="doc-row-time">{f.relative(when)}</span>}
+                    {when && <span className="doc-row-time" title={f.dateTime(when)}>{f.relative(when)}</span>}
                   </button>
                   {page !== "drafts" && (
                     <button className="icon-button small" title={t("restore")} onClick={() => void restore(d)}>

@@ -141,7 +141,7 @@ export function NotificationsButton({ badge, collectionName, onNavigate, onOpenC
                         {n.event !== "emails.export_completed" && <strong>{actor} </strong>}
                         {text} {subject(n) && <strong>{subject(n)}</strong>}
                       </span>
-                      <span className="settings-hint">{f.relative(n.createdAt)}</span>
+                      <span className="settings-hint" title={f.dateTime(n.createdAt)}>{f.relative(n.createdAt)}</span>
                     </span>
                     {!n.viewedAt && <span className="notification-dot inline" />}
                   </button>

@@ -172,6 +172,11 @@ export function DocumentView(p: Props) {
   const by = doc.updatedBy?.id === p.user.id ? null : doc.updatedBy?.name;
   const embeds = embedsEnabled(doc.id);
   const headingPrefix = (doc.preferences?.headingPrefix ?? "none") as HeadingPrefixStyle;
+  // Hovering "Edited …" gives the exact times and who.
+  const metaTip = [
+    `${t("updated")} · ${f.dateTime(doc.updatedAt)}${doc.updatedBy ? ` · ${t("by", { name: doc.updatedBy.name })}` : ""}`,
+    `${t("created")} · ${f.dateTime(doc.createdAt)}${doc.createdBy ? ` · ${t("by", { name: doc.createdBy.name })}` : ""}`,
+  ].join("\n");
 
   return (
     <div className="doc-scroll" id="doc-scroll">
@@ -227,7 +232,7 @@ export function DocumentView(p: Props) {
         <div className="doc-meta">
           {!doc.publishedAt && <span className="badge">{t("draft")}</span>}
           {!editable && meta.canUpdate === false && <span className="badge">{t("readOnly")}</span>}
-          <span title={f.dateTime(doc.updatedAt)}>{by ? t("editedBy", { name: by, time: f.relative(doc.updatedAt) }) : t("edited", { time: f.relative(doc.updatedAt) })}</span>
+          <span title={metaTip}>{by ? t("editedBy", { name: by, time: f.relative(doc.updatedAt) }) : t("edited", { time: f.relative(doc.updatedAt) })}</span>
         </div>
         <Editor
           key={`${doc.id}:${embeds}`}
