@@ -1919,7 +1919,8 @@ textarea.text-field {
 .settings-item-main:disabled {
   cursor: default;
 }
-.settings-item.faded {
+/* Only the person fades: the role picker and menu (and its popup) stay readable. */
+.settings-item.faded > :not(.menu-anchor, select, button) {
   opacity: 0.55;
 }
 .settings-item-text {
