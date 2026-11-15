@@ -1242,7 +1242,8 @@ export function makeFormats(lang: Lang): Formats {
       let delta = (new Date(iso).getTime() - Date.now()) / 1000;
       if (Math.abs(delta) < 45) return rtf.format(0, "second");
       for (const [unit, size] of steps) {
-        if (Math.abs(delta) < size) return rtf.format(Math.round(delta), unit);
+        // Months and years round down: 1 year and 8 months is "last year", not "2 years ago".
+        if (Math.abs(delta) < size) return rtf.format(unit === "month" || unit === "year" ? Math.trunc(delta) : Math.round(delta), unit);
         delta /= size;
       }
       return dtf.format(new Date(iso));
