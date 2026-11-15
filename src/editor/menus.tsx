@@ -5,6 +5,7 @@ import type { EditorView } from "prosemirror-view";
 import { setBlockType, toggleMark } from "prosemirror-commands";
 import { addColumnAfter, addRowAfter, CellSelection, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
 import { listCollections, listGroups, listUsers, recentlyViewed, searchTitles, type Collection, type Group, type User } from "../lib/api";
+import { EmojiGrid } from "../components/EmojiPicker";
 import { EntityIcon } from "../components/EntityIcon";
 import { CalendarIcon, Users as UsersIcon } from "../components/icons";
 import { dateLabel, dateLong, datesFor } from "./dates";
@@ -53,7 +54,7 @@ interface BlockDef {
   run: (view: EditorView) => void;
 }
 
-function blockDefs(pickFile: (images: boolean) => void): BlockDef[] {
+function blockDefs(pickFile: (images: boolean) => void, openEmoji: () => void): BlockDef[] {
   const cmd = (c: (s: EditorState, d?: EditorView["dispatch"]) => boolean) => (view: EditorView) => c(view.state, view.dispatch);
   return [
     { key: "p", label: "blockText", keywords: "text paragraph texte", icon: "¶", run: cmd(setBlockType(nodes.paragraph)) },
@@ -76,6 +77,7 @@ function blockDefs(pickFile: (images: boolean) => void): BlockDef[] {
     { key: "math", label: "blockMath", keywords: "math latex katex formula equation formule", icon: "∑", run: cmd(insertBlock(blocks.mathBlock())) },
     { key: "image", label: "blockImage", keywords: "image picture photo upload", icon: "🖼", run: () => pickFile(true) },
     { key: "file", label: "blockFile", keywords: "file attachment upload fichier piece jointe", icon: "📎", run: () => pickFile(false) },
+    { key: "emoji", label: "emoji", keywords: "emoji emoticon smiley emoticone", icon: "😀", run: openEmoji },
   ];
 }
 
@@ -99,6 +101,7 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
   const s = suggestKey.getState(state);
   const [items, setItems] = useState<Item[]>([]);
   const [active, setActive] = useState(0);
+  const [emojiAt, setEmojiAt] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const trigger = s?.trigger;
   const query = s?.query ?? "";
@@ -114,7 +117,7 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
     if (trigger === "/") {
       const q = normalize(query);
       done(
-        blockDefs(pickFile)
+        blockDefs(pickFile, () => setEmojiAt(view.state.selection.from))
           .filter((b) => uploads || (b.key !== "image" && b.key !== "file"))
           .filter((b) => !q || normalize(`${t(b.label)} ${b.keywords}`).includes(q))
           .map((b) => ({
@@ -124,8 +127,8 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
             run: (v) => {
               const current = suggestKey.getState(v.state);
               if (current) replaceTrigger(v, current);
-              b.run(v);
               v.focus();
+              b.run(v);
             },
           })),
       );
@@ -267,6 +270,7 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
     listRef.current?.querySelector(".active")?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
+  if (emojiAt !== null) return <EmojiPopover view={view} pos={emojiAt} t={t} onClose={() => setEmojiAt(null)} />;
   if (!s || !items.length) return null;
   const coords = view.coordsAtPos(s.from);
   const below = coords.bottom + 320 < window.innerHeight;
@@ -290,6 +294,54 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
           </button>
         </Fragment>
       ))}
+    </div>
+  );
+}
+
+// ---------- "/emoji": every emoji, by category ----------
+
+function EmojiPopover({ view, pos, t, onClose }: { view: EditorView; pos: number; t: Translate; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const close = () => {
+    onClose();
+    view.focus();
+  };
+  useEffect(() => {
+    const outside = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && onClose();
+    document.addEventListener("mousedown", outside);
+    return () => document.removeEventListener("mousedown", outside);
+  }, [onClose]);
+
+  const at = Math.min(pos, view.state.doc.content.size);
+  const coords = view.coordsAtPos(at);
+  const below = coords.bottom + 340 < window.innerHeight;
+  return (
+    <div
+      ref={ref}
+      className="editor-menu emoji-popover"
+      style={{
+        left: Math.max(8, Math.min(coords.left, window.innerWidth - 336)),
+        ...(below ? { top: coords.bottom + 6 } : { bottom: window.innerHeight - coords.top + 6 }),
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        close();
+      }}
+    >
+      <input className="text-input" autoFocus placeholder={t("searchEmoji")} value={query} onChange={(e) => setQuery(e.target.value)} />
+      <EmojiGrid
+        query={query}
+        onPick={(e) => {
+          if (!e) return;
+          const { selection } = view.state;
+          // A recent emoji that isn't in the catalog any more has no shortcode: insert it as text.
+          const node = e.shortcode === e.native ? schema.text(e.native) : nodes.emoji.create({ "data-name": e.shortcode });
+          view.dispatch(view.state.tr.replaceRangeWith(selection.from, selection.to, node).scrollIntoView());
+          close();
+        }}
+      />
     </div>
   );
 }

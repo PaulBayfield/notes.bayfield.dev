@@ -617,6 +617,16 @@ button.doc-icon:hover {
   font-size: 13px;
   user-select: none;
 }
+.emoji-popover {
+  width: 328px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.emoji-popover .emoji-picker-grid {
+  height: 220px;
+}
 .suggest-menu {
   width: 270px;
   max-height: 320px;
