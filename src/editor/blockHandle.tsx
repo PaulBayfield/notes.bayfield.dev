@@ -37,6 +37,14 @@ function anchorFor(view: EditorView, block: Block): { left: number; top: number 
     lineTop = coords.top;
     lineHeight = coords.bottom - coords.top;
   }
+  // Its first line scrolled out of sight (under the toolbar or the tabs): no handle, rather than
+  // one floating over them.
+  const scroller = dom.closest(".doc-scroll");
+  if (scroller) {
+    const box = scroller.getBoundingClientRect();
+    const middle = lineTop + lineHeight / 2;
+    if (middle < box.top + 4 || middle > box.bottom - 4) return null;
+  }
   const inList = block.node.type === nodes.list_item || block.node.type === nodes.checkbox_item;
   return { left: rect.left - (inList ? 70 : 50), top: lineTop + lineHeight / 2 - 12 };
 }
