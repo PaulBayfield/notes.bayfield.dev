@@ -40,6 +40,7 @@ import { EntityIcon } from "./components/EntityIcon";
 import { Archive, FileText, Home as HomeIcon, Pencil, Trash } from "./components/icons";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 import { setSmartText } from "./editor/rules";
+import { usePrefsSync } from "./lib/prefs";
 
 /** Desktop on Windows: WebView2's spelling suggestions are added to the editor's right-click menu. */
 const NATIVE_SPELLING = isTauri && isWindows;
@@ -142,6 +143,8 @@ function NotesApp({
   onAddWorkspace: (server?: string) => void;
 }) {
   const { t, settings, update } = useSettings();
+  // Theme and language are shared with the other bayfield.dev apps (prefs.bayfield.dev).
+  usePrefsSync({ theme: settings.theme, language: settings.language }, update);
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
   const [drawerOpen, setDrawerOpen] = useState(false);

@@ -8,6 +8,7 @@ import { useSettings, type Settings, type Theme } from "../../lib/settings";
 import { Avatar } from "../Avatar";
 import type { BadgeStyle } from "../NotificationsButton";
 import { PageHeader, Row, Select, Switch, usePage } from "./common";
+import { connectPrefs, disconnectPrefs, usePrefsStatus } from "../../lib/prefs";
 
 export function ProfilePage() {
   const { t } = useSettings();
@@ -175,6 +176,7 @@ export function PreferencesPage() {
           />
         </Row>
       </section>
+      <PrefsSyncRow />
       <section className="settings-rows">
         <h3>{t("editorSection")}</h3>
         <Row label={t("font")}>
@@ -432,5 +434,35 @@ export function AboutPage() {
         </Row>
       </section>
     </>
+  );
+}
+
+/** Theme and language shared with the other bayfield.dev apps, through prefs.bayfield.dev. */
+function PrefsSyncRow() {
+  const { t } = useSettings();
+  const { status, email } = usePrefsStatus();
+  const hint =
+    status === "connected"
+      ? t("prefsConnected", { email: email ?? "" })
+      : status === "connecting"
+        ? t("prefsApprove")
+        : status === "offline"
+          ? t("prefsOffline")
+          : t("prefsHint");
+  return (
+    <section className="settings-rows">
+      <h3>{t("prefsTitle")}</h3>
+      <Row label={t("prefsLabel")} hint={hint}>
+        {status === "connected" ? (
+          <button className="text-button" onClick={() => void disconnectPrefs()}>
+            {t("prefsDisconnect")}
+          </button>
+        ) : status === "disconnected" || status === "connecting" ? (
+          <button className="primary-button" onClick={() => void connectPrefs("Notes")}>
+            {t("prefsConnect")}
+          </button>
+        ) : null}
+      </Row>
+    </section>
   );
 }
