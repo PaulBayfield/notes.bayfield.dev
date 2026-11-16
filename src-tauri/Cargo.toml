@@ -30,9 +30,13 @@ url = "2"
 tokio = { version = "1", features = ["time"] }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tauri-plugin-process = "2.4.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2.14.1"
 
 # https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

@@ -26,7 +26,17 @@
       "csp": null
     }
   },
-  "plugins": {},
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdCRjg5QkM3NTNCQzg4QTkKUldTcGlMeFR4NXY0ZSs0eHk2amxmTHJaSnE5TDFQcklMSXg3MkUvQ2Rnbmovdk8xbDdTZEMzM2IK",
+      "endpoints": [
+        "https://github.com/PaulBayfield/notes.bayfield.dev/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
@@ -36,6 +46,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
   }
 }

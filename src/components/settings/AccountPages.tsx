@@ -3,7 +3,7 @@ import { ApiError, chooseAndUploadImage, installationInfo, setNotification, upda
 import { getAutostart, setAutostart } from "../../lib/desktop";
 import type { StringKey } from "../../lib/i18n";
 import { isTauri, openExternal } from "../../lib/platform";
-import { APP_VERSION, RELEASES_URL, useUpdateCheck } from "../../lib/updates";
+import { APP_VERSION, canInstallUpdates, installStatus, RELEASES_URL, useInstallUpdate, useUpdateCheck } from "../../lib/updates";
 import { useSettings, type Settings, type Theme } from "../../lib/settings";
 import { Avatar } from "../Avatar";
 import type { BadgeStyle } from "../NotificationsButton";
@@ -338,6 +338,7 @@ export function AboutPage() {
   const { server } = usePage();
   const { state, check } = useUpdateCheck(false);
   const release = state.status === "available" ? state.release : null;
+  const installer = useInstallUpdate();
   useEffect(() => {
     void check();
   }, [check]);
@@ -349,7 +350,7 @@ export function AboutPage() {
         ? t("upToDate")
         : state.status === "error"
           ? t("updateCheckFailed")
-          : t("updateAvailable", { version: release?.version ?? "" });
+          : (installStatus(t, installer.state) ?? t("updateAvailable", { version: release?.version ?? "" }));
 
   // The Outline version the server runs (self-hosted servers only).
   const [outline, setOutline] = useState<InstallationInfo | null>(null);
@@ -373,15 +374,28 @@ export function AboutPage() {
               <button className="text-button" onClick={() => void openExternal(release.url)}>
                 {t("whatsNew")}
               </button>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  if (settings.skippedUpdate === release.version) update({ skippedUpdate: "" });
-                  void openExternal(release.installer ?? release.url);
-                }}
-              >
-                {t("download")}
-              </button>
+              {canInstallUpdates && installer.state.status !== "error" ? (
+                <button
+                  className="primary-button"
+                  disabled={installer.state.status !== "idle"}
+                  onClick={() => {
+                    if (settings.skippedUpdate === release.version) update({ skippedUpdate: "" });
+                    void installer.install();
+                  }}
+                >
+                  {t("installUpdate")}
+                </button>
+              ) : (
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    if (settings.skippedUpdate === release.version) update({ skippedUpdate: "" });
+                    void openExternal(release.installer ?? release.url);
+                  }}
+                >
+                  {t("download")}
+                </button>
+              )}
             </>
           ) : (
             <button className="text-button" disabled={state.status === "checking"} onClick={() => void check()}>

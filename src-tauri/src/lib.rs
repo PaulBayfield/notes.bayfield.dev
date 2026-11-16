@@ -772,7 +772,12 @@ pub fn run() {
                 responder.respond(proxy(app, request).await);
             });
         })
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // Updates install in place over the current version (same folder, shortcuts and
+            // taskbar pin), from the signed artifacts attached to each GitHub release.
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             shell::setup(app)?;
             let handle = app.handle().clone();
             restart_realtime(&handle);

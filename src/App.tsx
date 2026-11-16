@@ -3,7 +3,7 @@ import type { EditorView } from "prosemirror-view";
 import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isMac, isTauri, openExternal } from "./lib/platform";
-import { useUpdateCheck } from "./lib/updates";
+import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
 import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
 import { SettingsProvider, forServer, useSettings } from "./lib/settings";
 import { rememberAccount } from "./lib/accounts";
@@ -171,6 +171,7 @@ function NotesApp({
 
   const workspace = useWorkspace(onError);
   const updates = useUpdateCheck();
+  const installer = useInstallUpdate();
   const newRelease = updates.state.status === "available" && updates.state.release.version !== settings.skippedUpdate ? updates.state.release : null;
   useDesktopSync(settings.closeToTray, settings.startMinimized, t);
   // Opens on the last page visited.
@@ -551,11 +552,17 @@ function NotesApp({
         />
         {newRelease && (
           <div className="banner update-banner" role="status">
-            <span>{t("updateAvailable", { version: newRelease.version })}</span>
+            <span>{installStatus(t, installer.state) ?? t("updateAvailable", { version: newRelease.version })}</span>
             <span className="banner-actions">
-              <button className="link-button" onClick={() => void openExternal(newRelease.installer ?? newRelease.url)}>
-                {t("download")}
-              </button>
+              {canInstallUpdates && installer.state.status !== "error" ? (
+                <button className="link-button" disabled={installer.state.status !== "idle"} onClick={() => void installer.install()}>
+                  {t("installUpdate")}
+                </button>
+              ) : (
+                <button className="link-button" onClick={() => void openExternal(newRelease.installer ?? newRelease.url)}>
+                  {t("download")}
+                </button>
+              )}
               <button className="link-button" onClick={() => void openExternal(newRelease.url)}>
                 {t("whatsNew")}
               </button>
