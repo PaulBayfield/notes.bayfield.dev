@@ -2555,6 +2555,7 @@ dependencies = [
  "futures-util",
  "keyring",
  "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",

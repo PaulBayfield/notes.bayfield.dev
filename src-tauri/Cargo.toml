@@ -29,6 +29,8 @@ keyring = "4"
 url = "2"
 tokio = { version = "1", features = ["time"] }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+# Only to pick the TLS backend (see `run`); same version as reqwest's.
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 tauri-plugin-process = "2.4.0"
 

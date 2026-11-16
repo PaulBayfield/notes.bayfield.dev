@@ -766,6 +766,11 @@ async fn proxy(app: AppHandle, request: http::Request<Vec<u8>>) -> http::Respons
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // rustls has two TLS backends compiled in (reqwest's aws-lc-rs, and ring from the updater
+    // plugin), so it can't pick one on its own: the first connection that relies on the default
+    // (the realtime WebSocket) would panic. Choose before anything connects.
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
     tauri::Builder::default()
         // Must come first. A second launch (or an `outline://` link) goes to the running app.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
