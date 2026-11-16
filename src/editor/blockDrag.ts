@@ -38,7 +38,28 @@ function unitsAt(view: EditorView, x: number, y: number): Block[] {
   if (atNode?.isBlock && found.inside === pos) add(atNode, pos, $pos.parent, $pos.index());
   for (let d = $pos.depth; d > 0; d--) add($pos.node(d), $pos.before(d), $pos.node(d - 1), $pos.index(d - 1));
   if (!units.length && $pos.nodeAfter?.isBlock) units.push({ node: $pos.nodeAfter, pos });
+  // Left of a list's text (its margin, or the gutter where the handle is) the pointer counts as
+  // over the whole list, or over the item that holds a nested list: look for the item at that
+  // height, so each one can be dragged on its own.
+  if (units.length && (isList(units[0].node.type) || isItem(units[0].node.type))) units.unshift(...itemsAt(view, units[0], y));
   return units;
+}
+
+/** The list items inside `block` (a list, or an item with nested lists) at height `y`, innermost first. */
+function itemsAt(view: EditorView, block: Block, y: number): Block[] {
+  const found: Block[] = [];
+  const inList = isList(block.node.type);
+  block.node.forEach((child, offset) => {
+    if (found.length || !(inList ? isItem(child.type) : isList(child.type))) return;
+    const pos = block.pos + 1 + offset;
+    const dom = view.nodeDOM(pos);
+    if (!(dom instanceof HTMLElement)) return;
+    const rect = dom.getBoundingClientRect();
+    if (y < rect.top || y > rect.bottom) return;
+    found.push(...itemsAt(view, { node: child, pos }, y));
+    if (isItem(child.type)) found.push({ node: child, pos });
+  });
+  return found;
 }
 
 /** The block under the pointer that the handle is for: the innermost one that can be dragged. */
