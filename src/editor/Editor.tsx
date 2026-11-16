@@ -4,7 +4,7 @@ import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
 import { dropCursor } from "prosemirror-dropcursor";
 import { gapCursor } from "prosemirror-gapcursor";
-import { tableEditing } from "prosemirror-tables";
+import { columnResizing, tableEditing } from "prosemirror-tables";
 import { mathPlugin } from "@benrbray/prosemirror-math";
 import { ySyncPlugin, yCursorPlugin, yUndoPlugin } from "y-prosemirror";
 import { docIdFromHref, uploadAttachment, uploadAttachmentFromPath, webUrl, type Attachment, type User } from "../lib/api";
@@ -207,6 +207,8 @@ export function Editor(props: Props) {
           pasteMenuPlugin(),
           ...editorKeymaps(),
           mathPlugin,
+          // Drag a column's right edge to resize it; widths are kept in the cells (`colwidth`), as in Outline.
+          columnResizing({ cellMinWidth: 60 }),
           tableEditing(),
           highlightPlugin(),
           findPlugin(),

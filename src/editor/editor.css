@@ -418,6 +418,11 @@ button.doc-icon:hover {
   width: 100%;
   font-size: 0.94em;
 }
+.doc-content .column-resize-handle {
+  width: 3px;
+  right: -2px;
+  background: var(--primary);
+}
 .doc-content td,
 .doc-content th {
   border: 1px solid var(--border-strong);
