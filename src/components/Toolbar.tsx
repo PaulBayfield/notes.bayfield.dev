@@ -92,10 +92,11 @@ export function Toolbar(p: Props) {
       {p.publish}
       {p.docMenu}
       {p.notifications}
-      <AccountMenu user={p.user} onOpenSettings={p.onOpenSettings} onSignOut={p.onSignOut} />
       <button className={`icon-button${p.split ? " active" : ""}`} title={t(p.split ? "closeSplitView" : "splitView")} aria-pressed={p.split} onClick={p.onToggleSplit}>
         <Columns />
       </button>
+      {/* The profile last, right before the side panel toggle (as in every bayfield.dev app). */}
+      <AccountMenu user={p.user} onOpenSettings={p.onOpenSettings} onSignOut={p.onSignOut} />
       <button
         className={`icon-button panel-toggle${p.panelVisible ? " active" : ""}`}
         title={`${t("togglePanel")} (.)`}
