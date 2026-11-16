@@ -45,8 +45,10 @@ function anchorFor(view: EditorView, block: Block): { left: number; top: number 
     const middle = lineTop + lineHeight / 2;
     if (middle < box.top + 4 || middle > box.bottom - 4) return null;
   }
-  const inList = block.node.type === nodes.list_item || block.node.type === nodes.checkbox_item;
-  return { left: rect.left - (inList ? 70 : 50), top: lineTop + lineHeight / 2 - 12 };
+  // A bullet or number is drawn outside its item, left of `rect`: the handle leaves room for it. A
+  // to-do's checkbox is inside the item, so it sits closer, at the same distance from the box.
+  const offset = block.node.type === nodes.list_item ? 70 : block.node.type === nodes.checkbox_item ? 56 : 50;
+  return { left: rect.left - offset, top: lineTop + lineHeight / 2 - 12 };
 }
 
 interface MenuItem {
