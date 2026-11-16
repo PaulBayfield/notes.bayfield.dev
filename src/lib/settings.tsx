@@ -25,30 +25,35 @@ export interface Settings {
   folded: string[];
   /** Desktop: last server signed in to. */
   lastServer: string;
-  /** Reopened on launch. */
+  /** Reopened on launch: the open tab's page. */
   lastPath: string;
+  /** Reopened on launch: every open tab's page, and which one was open. */
+  tabs: string[];
+  activeTab: number;
   /** Desktop: the close button hides the window to the tray instead of quitting. */
   closeToTray: boolean;
   /** Desktop: when launched at startup, stay in the tray. */
   startMinimized: boolean;
   /** A new version the user chose not to be told about again. */
   skippedUpdate: string;
-  /** The server (origin) that `lastPath`, `expanded` and `folded` belong to. */
+  /** The server (origin) that `lastPath`, `tabs`, `expanded` and `folded` belong to. */
   activeServer: string;
   /** Those settings for the other servers, kept while another one is in use. */
   servers: Record<string, ServerSettings>;
 }
 
 /** Settings that only make sense on one server: they name its pages and collections. */
-export type ServerSettings = Pick<Settings, "lastPath" | "expanded" | "folded">;
+export type ServerSettings = Pick<Settings, "lastPath" | "tabs" | "activeTab" | "expanded" | "folded">;
 
 /** Puts away the current server's own settings and brings back `server`'s. */
 export function forServer(s: Settings, server: string): Partial<Settings> {
   if (s.activeServer === server) return {};
   // First run with this setting: what's there belongs to the server in use.
   if (!s.activeServer) return { activeServer: server };
-  const servers = { ...s.servers, [s.activeServer]: { lastPath: s.lastPath, expanded: s.expanded, folded: s.folded } };
-  const next = servers[server] ?? { lastPath: "", expanded: [], folded: [] };
+  const servers = { ...s.servers, [s.activeServer]: { lastPath: s.lastPath, tabs: s.tabs, activeTab: s.activeTab, expanded: s.expanded, folded: s.folded } };
+  // Saved before tabs existed: no tabs (the last page reopens instead).
+  const saved: Partial<ServerSettings> | undefined = servers[server];
+  const next: ServerSettings = { lastPath: "", expanded: [], folded: [], tabs: [], activeTab: 0, ...saved };
   delete servers[server];
   return { ...next, servers, activeServer: server };
 }
@@ -70,6 +75,8 @@ const DEFAULTS: Settings = {
   folded: [],
   lastServer: import.meta.env.VITE_OUTLINE_URL ?? "notes.bayfield.dev",
   lastPath: "",
+  tabs: [],
+  activeTab: 0,
   closeToTray: true,
   startMinimized: true,
   skippedUpdate: "",

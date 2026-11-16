@@ -50,7 +50,7 @@ interface Props {
   headingPrefix: HeadingPrefixStyle;
   t: Translate;
   refreshToken: () => Promise<string | undefined>;
-  onOpenDocument: (id: string) => void;
+  onOpenDocument: (id: string, newTab?: boolean) => void;
   onStatus: (status: EditorStatus, detail?: string) => void;
   onPresence: (users: PresenceUser[]) => void;
   onHeadings: (headings: Heading[]) => void;
@@ -127,9 +127,9 @@ export function Editor(props: Props) {
     const onAwareness = () => !destroyed && p().onPresence(presence(provider, p().user.id));
     provider.on("awarenessChange", onAwareness);
 
-    const openLink = (href: string) => {
+    const openLink = (href: string, newTab = false) => {
       const id = docIdFromHref(href);
-      if (id) p().onOpenDocument(id);
+      if (id) p().onOpenDocument(id, newTab);
       else if (href.startsWith("/")) void openExternal(webUrl(href));
       else if (!href.startsWith("#")) void openExternal(href);
     };
@@ -220,7 +220,7 @@ export function Editor(props: Props) {
       editorView = new EditorView(mountRef.current, {
         state: editorState,
         editable: () => p().editable,
-        nodeViews: nodeViews({ openLink, openDocument: (id) => p().onOpenDocument(id), foldedToggles: new Set(), embeds: p().embeds }),
+        nodeViews: nodeViews({ openLink, openDocument: (id, newTab) => p().onOpenDocument(id, newTab), foldedToggles: new Set(), embeds: p().embeds }),
         attributes: { class: "doc-content", spellcheck: String(p().spellcheck) },
         // `this`, not `editorView`: y-prosemirror dispatches while the view is still being constructed.
         dispatchTransaction(this: EditorView, tr) {
@@ -242,6 +242,14 @@ export function Editor(props: Props) {
             // Never let the webview navigate. Ctrl+click (or any click when read-only) opens it.
             event.preventDefault();
             if (event.ctrlKey || event.metaKey || !v.editable) openLink(a.getAttribute("href")!);
+            return true;
+          },
+          // A middle click on a link to a page opens it in a new tab.
+          auxclick(v, event) {
+            const a = event.button === 1 && (event.target as HTMLElement).closest?.("a[href]");
+            if (!a || !v.dom.contains(a)) return false;
+            event.preventDefault();
+            openLink(a.getAttribute("href")!, true);
             return true;
           },
         },

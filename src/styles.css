@@ -1009,3 +1009,110 @@ textarea:disabled {
   font-size: 13px;
   opacity: 0.85;
 }
+
+/* ---------- Tabs ---------- */
+
+.tab-bar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 34px;
+  padding: 4px 8px 0;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-sidebar, var(--bg));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-bar::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 200px;
+  min-width: 90px;
+  padding: 0 4px 0 10px;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: default;
+  user-select: none;
+}
+.tab:hover {
+  background: var(--hover);
+}
+.tab.active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  clip-path: inset(-1px -1px 0 -1px);
+}
+/* Joins the open tab to the page under it. */
+.tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--bg);
+}
+.tab.dragging {
+  opacity: 0.5;
+}
+.tab.drop-before::before,
+.tab.drop-after::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--primary);
+}
+.tab.drop-before::before {
+  left: -2px;
+}
+.tab.drop-after::before {
+  right: -2px;
+}
+.tab-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+}
+.tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  opacity: 0;
+}
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  opacity: 1;
+}
+.tab-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.tab-new {
+  flex: none;
+  align-self: center;
+  height: 26px;
+  min-width: 26px;
+}

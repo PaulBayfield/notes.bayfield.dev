@@ -135,6 +135,12 @@ export const Check = (p: P) => (
     <path d="M20 6 9 17l-5-5" />
   </Icon>
 );
+export const NewTab = (p: P) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 9h18M12 12.5v5M9.5 15h5" />
+  </Icon>
+);
 export const ZoomIn = (p: P) => (
   <Icon {...p}>
     <circle cx="11" cy="11" r="8" />

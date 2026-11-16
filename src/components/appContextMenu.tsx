@@ -7,13 +7,13 @@ import type { Translate } from "../lib/i18n";
 import { mod, openExternal } from "../lib/platform";
 import { editorAt } from "../editor/registry";
 import { menu, type MenuEntry } from "./Menu";
-import { ArrowLeft, ArrowRight, ClipboardPaste, Copy, External, LinkIcon, MessageSquare, Repeat, Scissors } from "./icons";
+import { ArrowLeft, ArrowRight, ClipboardPaste, Copy, External, LinkIcon, MessageSquare, NewTab, Repeat, Scissors } from "./icons";
 
 interface Context {
   t: Translate;
   back: () => void;
   forward: () => void;
-  openDocument: (id: string) => void;
+  openDocument: (id: string, newTab?: boolean) => void;
 }
 
 const key = (combo: string) => `${mod}+${combo}`;
@@ -51,11 +51,12 @@ const command = (target: HTMLElement, name: "cut" | "copy" | "selectAll") => () 
   document.execCommand(name);
 };
 
-function linkItems(href: string, c: Context): MenuEntry[] {
+function linkItems(href: string, c: Context): (MenuEntry | false)[] {
   const id = docIdFromHref(href);
   const url = href.startsWith("/") ? webUrl(href) : href;
   return [
     { label: c.t("openLink"), icon: <External size={15} />, onClick: () => (id ? c.openDocument(id) : void openExternal(url)) },
+    !!id && { label: c.t("openInNewTab"), icon: <NewTab size={15} />, onClick: () => c.openDocument(id, true) },
     { label: c.t("copyLink"), icon: <LinkIcon size={15} />, onClick: () => void navigator.clipboard.writeText(url) },
     { kind: "separator" },
   ];

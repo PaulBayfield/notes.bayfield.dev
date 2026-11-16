@@ -35,7 +35,7 @@ interface Props {
   refreshToken: () => Promise<string | undefined>;
   onLoaded: (meta: DocMeta | null) => void;
   onTitleChange: (id: string, title: string) => void;
-  onOpenDocument: (id: string) => void;
+  onOpenDocument: (id: string, newTab?: boolean) => void;
   onStatus: (status: EditorStatus) => void;
   onPresence: (users: PresenceUser[]) => void;
   onHeadings: (headings: Heading[]) => void;
@@ -263,7 +263,13 @@ export function DocumentView(p: Props) {
           <section className="sub-pages">
             <h2 className="sub-pages-title">{t("subPages")}</h2>
             {p.subPages.map((n) => (
-              <button key={n.id} className="doc-row" onClick={() => p.onOpenDocument(n.id)}>
+              <button
+                key={n.id}
+                className="doc-row"
+                onClick={(e) => p.onOpenDocument(n.id, e.ctrlKey || e.metaKey)}
+                onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+                onAuxClick={(e) => e.button === 1 && p.onOpenDocument(n.id, true)}
+              >
                 <span className="doc-row-icon">
                   <EntityIcon icon={n.icon} color={n.color} size={20} fallback={<FileText size={16} />} />
                 </span>

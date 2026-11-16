@@ -50,7 +50,7 @@ interface Props {
   t: Translate;
   user: User;
   onChange: (json: RichText, doc: Node) => void;
-  onOpenDocument: (id: string) => void;
+  onOpenDocument: (id: string, newTab?: boolean) => void;
 }
 
 export function StaticEditor(props: Props) {
@@ -63,9 +63,9 @@ export function StaticEditor(props: Props) {
   useEffect(() => {
     if (!mount.current) return;
     const p = () => propsRef.current;
-    const openLink = (href: string) => {
+    const openLink = (href: string, newTab = false) => {
       const id = docIdFromHref(href);
-      if (id) p().onOpenDocument(id);
+      if (id) p().onOpenDocument(id, newTab);
       else void openExternal(href.startsWith("/") ? webUrl(href) : href);
     };
     const v = new EditorView(mount.current, {
@@ -86,7 +86,7 @@ export function StaticEditor(props: Props) {
         ],
       }),
       editable: () => p().editable,
-      nodeViews: nodeViews({ openLink, openDocument: (id) => p().onOpenDocument(id), foldedToggles: new Set(), embeds: true }),
+      nodeViews: nodeViews({ openLink, openDocument: (id, newTab) => p().onOpenDocument(id, newTab), foldedToggles: new Set(), embeds: true }),
       attributes: { class: "doc-content" },
       dispatchTransaction(this: EditorView, tr) {
         const next = this.state.apply(tr);
@@ -100,6 +100,14 @@ export function StaticEditor(props: Props) {
           if (!a || !v.dom.contains(a)) return false;
           event.preventDefault();
           if (event.ctrlKey || event.metaKey || !v.editable) openLink(a.getAttribute("href")!);
+          return true;
+        },
+        // A middle click on a link to a page opens it in a new tab.
+        auxclick(v, event) {
+          const a = event.button === 1 && (event.target as HTMLElement).closest?.("a[href]");
+          if (!a || !v.dom.contains(a)) return false;
+          event.preventDefault();
+          openLink(a.getAttribute("href")!, true);
           return true;
         },
       },

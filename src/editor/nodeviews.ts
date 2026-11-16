@@ -16,7 +16,8 @@ import { downloadMedia, fileNameFrom, viewImage } from "./media";
 export interface NodeViewHooks {
   /** Opens a link: internal documents in the app, the rest in the browser. */
   openLink: (href: string) => void;
-  openDocument: (id: string) => void;
+  /** `newTab`: a middle click, which opens it in a new tab. */
+  openDocument: (id: string, newTab?: boolean) => void;
   /** Toggle state survives re-renders (it's local, not stored in the document). */
   foldedToggles: Set<string>;
   /** Show embeds (videos, designs…) inline rather than as link cards. */
@@ -523,6 +524,12 @@ function mentionView(node: Node, view: EditorView, getPos: () => number | undefi
   const dom = el("span", { class: `mention mention-${type}`, contenteditable: "false" }, label);
   if (type === "document") {
     dom.addEventListener("click", () => hooks.openDocument(node.attrs.modelId));
+    dom.addEventListener("mousedown", (e) => e.button === 1 && e.preventDefault());
+    dom.addEventListener("auxclick", (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      hooks.openDocument(node.attrs.modelId, true);
+    });
   } else if (type === "collection") {
     dom.addEventListener("click", () => window.dispatchEvent(new CustomEvent(OPEN_COLLECTION_EVENT, { detail: node.attrs.modelId })));
   } else if (node.attrs.href) {

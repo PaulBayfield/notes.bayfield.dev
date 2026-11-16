@@ -4,7 +4,7 @@ import { AuthError, createDocument, type Team, moveCollection, moveDocument, pub
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isMac, isTauri, openExternal } from "./lib/platform";
 import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
-import { parseRoute, routePath, useRouter, type Route } from "./lib/router";
+import { parseRoute, routePath, useTabs, type Route } from "./lib/router";
 import { SettingsProvider, forServer, useSettings } from "./lib/settings";
 import { rememberAccount } from "./lib/accounts";
 import { WorkspaceDialog } from "./components/WorkspaceDialog";
@@ -32,6 +32,9 @@ import { DocListPage } from "./components/DocListPage";
 import { ShareButton } from "./components/ShareButton";
 import { DatePickerHost } from "./components/DatePicker";
 import { MediaHost } from "./components/MediaHost";
+import { TabBar, type TabInfo } from "./components/TabBar";
+import { EntityIcon } from "./components/EntityIcon";
+import { Archive, FileText, Home as HomeIcon, Pencil, Trash } from "./components/icons";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 import { setSmartText } from "./editor/rules";
 
@@ -175,18 +178,24 @@ function NotesApp({
   const installer = useInstallUpdate();
   const newRelease = updates.state.status === "available" && updates.state.release.version !== settings.skippedUpdate ? updates.state.release : null;
   useDesktopSync(settings.closeToTray, settings.startMinimized, t);
-  // Opens on the last page visited.
-  const router = useRouter(settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" });
+  // Reopens the tabs that were open (or, before tabs, the last page visited).
+  const router = useTabs(
+    settings.tabs.length ? settings.tabs.map(parseRoute) : [settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" }],
+    settings.activeTab,
+  );
   const { route, navigate } = router;
   /** The page reopened on launch, until it loads: if it's gone, go home instead. */
   const reopened = useRef(route.name === "doc" ? route.id : null);
 
+  const { openTab } = router;
+  /** Opens a page here, or in a new tab behind this one (`newTab`: Ctrl+click, middle click). */
   const go = useCallback(
-    (r: Route) => {
-      navigate(r);
+    (r: Route, newTab = false) => {
+      if (newTab) openTab(r, false);
+      else navigate(r);
       if (mobile) setDrawerOpen(false);
     },
-    [navigate, mobile],
+    [navigate, openTab, mobile],
   );
 
   // People who have edited the open page, for the header (hidden when insights are off, as in Outline).
@@ -201,6 +210,13 @@ function NotesApp({
       cancelled = true;
     };
   }, [collaboratorKey]);
+
+  // Remember the open tabs for next time.
+  const tabPaths = router.tabs.map((tab) => routePath(router.currentRoute(tab))).join("|");
+  useEffect(() => {
+    update({ tabs: tabPaths.split("|"), activeTab: router.active });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabPaths, router.active]);
 
   // Remember where we were, and reset per-document state when leaving a document.
   useEffect(() => {
@@ -395,13 +411,22 @@ function NotesApp({
     else if ((ctrl && k === ".") || (!ctrl && !e.altKey && k === "." && !typing)) togglePanel();
     else if (!ctrl && !e.altKey && k === "\\" && !typing) toggleSidebar();
     else if (ctrl && k === ",") setSettingsOpen(true);
+    // Tabs, as in a browser.
+    else if (ctrl && !e.altKey && !e.shiftKey && k === "t") router.openTab();
+    else if (ctrl && !e.altKey && e.shiftKey && k === "t") router.reopenClosedTab();
+    else if (ctrl && !e.altKey && !e.shiftKey && k === "w" && router.tabs.length > 1) router.closeTab();
+    else if (e.ctrlKey && !e.altKey && (e.key === "Tab" || e.key === "PageDown" || e.key === "PageUp")) {
+      const dir = e.key === "PageUp" || (e.key === "Tab" && e.shiftKey) ? -1 : 1;
+      router.selectTab((router.active + dir + router.tabs.length) % router.tabs.length);
+    } else if (ctrl && !e.altKey && !e.shiftKey && /^[1-9]$/.test(e.key) && router.tabs.length > 1)
+      router.selectTab(e.key === "9" ? router.tabs.length - 1 : Math.min(Number(e.key) - 1, router.tabs.length - 1));
     else if (e.altKey && !ctrl && e.key === "ArrowLeft") router.back();
     else if (e.altKey && !ctrl && e.key === "ArrowRight") router.forward();
     else return;
     e.preventDefault();
   };
-  const contextRef = useRef({ t, openDocument: (id: string) => go({ name: "doc", id }) });
-  contextRef.current = { t, openDocument: (id: string) => go({ name: "doc", id }) };
+  const contextRef = useRef({ t, openDocument: (id: string, newTab?: boolean) => go({ name: "doc", id }, newTab) });
+  contextRef.current = { t, openDocument: (id: string, newTab?: boolean) => go({ name: "doc", id }, newTab) };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyHandler.current(e);
     // Mouse back/forward buttons.
@@ -458,6 +483,70 @@ function NotesApp({
     // On narrow windows only the last two fit.
     return [...(wide ? out : out.slice(-1)), { label: meta.doc.title || t("untitled") }];
   }, [route, meta, located, workspace.collections, t, go, wide]);
+
+  // ---------- Tabs ----------
+
+  /** Titles of pages opened before, for tabs whose page isn't in the sidebar (drafts, shared…). */
+  const knownTitles = useRef(new Map<string, string>());
+  /** The open page's details, once they're for page `id` (they lag a moment behind a switch). */
+  const metaFor = (id: string) => (meta && (meta.doc.id === id || meta.doc.urlId === id) ? meta.doc : null);
+  if (route.name === "doc" && metaFor(route.id)) {
+    knownTitles.current.set(route.id, meta!.doc.title);
+    knownTitles.current.set(meta!.doc.id, meta!.doc.title);
+  }
+  const tabInfo = (r: Route): Omit<TabInfo, "id"> => {
+    switch (r.name) {
+      case "home":
+        return { title: t("home"), icon: <HomeIcon size={14} /> };
+      case "drafts":
+        return { title: t("drafts"), icon: <Pencil size={14} /> };
+      case "archive":
+        return { title: t("archiveTitle"), icon: <Archive size={14} /> };
+      case "trash":
+        return { title: t("trash"), icon: <Trash size={14} /> };
+      case "collection": {
+        const c = workspace.collections.find((x) => x.id === r.id || x.urlId === r.id);
+        return { title: c?.name ?? "…", icon: <EntityIcon icon={c?.icon} color={c?.color} size={15} fallback={<span className="collection-dot" />} /> };
+      }
+      case "doc": {
+        const open = metaFor(r.id);
+        const node = workspace.locate(r.id)?.node;
+        const title = open?.title ?? node?.title ?? knownTitles.current.get(r.id);
+        return {
+          title: title === undefined ? "…" : title || t("untitled"),
+          icon: <EntityIcon icon={open?.icon ?? node?.icon} color={open?.color ?? node?.color} size={15} fallback={<FileText size={14} />} />,
+        };
+      }
+    }
+  };
+  const tabs: TabInfo[] = router.tabs.map((tab) => ({ id: tab.id, ...tabInfo(router.currentRoute(tab)) }));
+  const tabMenu = (index: number, e: MouseEvent) =>
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: t("newTab"), kbd: `${isMac ? "⌘" : "Ctrl"}+T`, onClick: () => router.openTab() },
+        { label: t("duplicateTab"), onClick: () => router.openTab(router.currentRoute(router.tabs[index])) },
+        { kind: "separator" },
+        { label: t("closeTab"), kbd: `${isMac ? "⌘" : "Ctrl"}+W`, onClick: () => router.closeTab(index) },
+        {
+          label: t("closeOtherTabs"),
+          disabled: router.tabs.length < 2,
+          onClick: () => {
+            for (let i = router.tabs.length - 1; i >= 0; i--) if (i !== index) router.closeTab(i);
+          },
+        },
+        {
+          label: t("closeTabsToRight"),
+          disabled: index >= router.tabs.length - 1,
+          onClick: () => {
+            for (let i = router.tabs.length - 1; i > index; i--) router.closeTab(i);
+          },
+        },
+        { kind: "separator" },
+        { label: t("reopenClosedTab"), kbd: `${isMac ? "⌘" : "Ctrl"}+Shift+T`, onClick: router.reopenClosedTab },
+      ],
+    });
 
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
@@ -551,6 +640,17 @@ function NotesApp({
           }
           onSignOut={doSignOut}
         />
+        {tabs.length > 1 && (
+          <TabBar
+            tabs={tabs}
+            active={router.active}
+            onSelect={router.selectTab}
+            onClose={router.closeTab}
+            onNew={() => router.openTab()}
+            onMove={router.moveTab}
+            onContextMenu={tabMenu}
+          />
+        )}
         {newRelease && (
           <div className="banner update-banner" role="status">
             <span>{installStatus(t, installer.state) ?? t("updateAvailable", { version: newRelease.version })}</span>
@@ -592,7 +692,7 @@ function NotesApp({
               workspace.renameLocal(id, title);
               setMeta((m) => (m && m.doc.id === id ? { ...m, doc: { ...m.doc, title } } : m));
             }}
-            onOpenDocument={(id) => go({ name: "doc", id })}
+            onOpenDocument={(id, newTab) => go({ name: "doc", id }, newTab)}
             onStatus={setDocStatus}
             onPresence={setPresence}
             onHeadings={(h) => {

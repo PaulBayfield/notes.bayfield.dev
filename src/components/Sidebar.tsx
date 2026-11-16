@@ -43,7 +43,8 @@ interface Props {
   route: Route;
   /** Canonical id of the open document, once loaded. */
   activeDocId?: string;
-  onNavigate: (route: Route) => void;
+  /** `newTab`: Ctrl+click or a middle click, which open the page in a new tab. */
+  onNavigate: (route: Route, newTab?: boolean) => void;
   onNewDoc: (collectionId?: string, parentDocumentId?: string) => void;
   onSearch: () => void;
   onClose: () => void;
@@ -55,6 +56,19 @@ interface Props {
   /** The workspace name was clicked. */
   onOpenWorkspace: () => void;
   onCollectionMenu: (collection: Collection, e: MouseEvent) => void;
+}
+
+/** A click opens the page here; Ctrl+click or a middle click opens it in a new tab. */
+function navProps(p: Pick<Props, "onNavigate">, route: Route) {
+  return {
+    onClick: (e: MouseEvent) => p.onNavigate(route, e.ctrlKey || e.metaKey),
+    onMouseDown: (e: MouseEvent) => e.button === 1 && e.preventDefault(),
+    onAuxClick: (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      p.onNavigate(route, true);
+    },
+  };
 }
 
 type StarredItem = { kind: "doc"; star: StarRecord; doc: Doc } | { kind: "collection"; star: StarRecord; collection: Collection };
@@ -206,7 +220,7 @@ export function Sidebar(p: Props) {
           <Avatar user={{ name: p.team.name, color: "var(--primary)", avatarUrl: p.team.avatarUrl }} size={22} className="square" />
           <span>{p.team.name}</span>
         </button>
-        <button className={`sidebar-row${p.route.name === "home" ? " active" : ""}`} onClick={() => p.onNavigate({ name: "home" })}>
+        <button className={`sidebar-row${p.route.name === "home" ? " active" : ""}`} {...navProps(p, { name: "home" })}>
           <Home />
           <span>{t("home")}</span>
         </button>
@@ -226,7 +240,7 @@ export function Sidebar(p: Props) {
                   key={doc.id}
                   className={`tree-row${isActive(doc.id) ? " active" : ""}`}
                   style={{ "--depth": 0 } as CSSProperties}
-                  onClick={() => p.onNavigate({ name: "doc", id: doc.id })}
+                  {...navProps(p, { name: "doc", id: doc.id })}
                   onContextMenu={(e) => doc.collectionId && p.onContextMenu({ id: doc.id, title: doc.title, url: doc.url, collectionId: doc.collectionId }, e)}
                 >
                   <span className="tree-chevron-space" />
@@ -274,7 +288,7 @@ export function Sidebar(p: Props) {
                         style={{ "--depth": 0, "--c": s.collection.color ?? "var(--primary)" } as CSSProperties}
                         role="button"
                         tabIndex={0}
-                        onClick={() => p.onNavigate({ name: "collection", id: s.collection.id })}
+                        {...navProps(p, { name: "collection", id: s.collection.id })}
                         onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "collection", id: s.collection.id })}
                         onContextMenu={(e) => {
                           e.preventDefault();
@@ -293,7 +307,7 @@ export function Sidebar(p: Props) {
                         style={{ "--depth": 0 } as CSSProperties}
                         role="button"
                         tabIndex={0}
-                        onClick={() => p.onNavigate({ name: "doc", id: s.doc.id })}
+                        {...navProps(p, { name: "doc", id: s.doc.id })}
                         onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "doc", id: s.doc.id })}
                         onContextMenu={(e) => s.doc.collectionId && p.onContextMenu({ id: s.doc.id, title: s.doc.title, url: s.doc.url, collectionId: s.doc.collectionId }, e)}
                       >
@@ -332,7 +346,7 @@ export function Sidebar(p: Props) {
             ["trash", "trash", <Trash key="t" size={15} />],
           ] as const
         ).map(([name, label, icon]) => (
-          <button key={name} className={`sidebar-row${p.route.name === name ? " active" : ""}`} onClick={() => p.onNavigate({ name })}>
+          <button key={name} className={`sidebar-row${p.route.name === name ? " active" : ""}`} {...navProps(p, { name })}>
             {icon}
             <span>{t(label)}</span>
           </button>
@@ -388,7 +402,7 @@ function CollectionBlock(p: BlockProps) {
           e.preventDefault();
           p.onCollectionMenu(collection, e);
         }}
-        onClick={() => p.onNavigate({ name: "collection", id: collection.id })}
+        {...navProps(p, { name: "collection", id: collection.id })}
         onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "collection", id: collection.id })}
       >
         <button
@@ -462,7 +476,7 @@ function DocTree(p: TreeProps) {
           onDragOver={(e) => p.dnd.over({ kind: "doc", id: node.id, zone: zoneOf(e) }, e)}
           onDrop={p.dnd.finish}
           onDragEnd={p.dnd.end}
-          onClick={() => p.onNavigate({ name: "doc", id: node.id })}
+          {...navProps(p, { name: "doc", id: node.id })}
           onKeyDown={(e) => e.key === "Enter" && p.onNavigate({ name: "doc", id: node.id })}
           onContextMenu={(e) => p.onContextMenu({ id: node.id, title: node.title, url: node.url, collectionId: p.collectionId }, e)}
         >
