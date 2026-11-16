@@ -51,11 +51,25 @@ interface Props {
   onCloseFind: () => void;
 }
 
+/**
+ * Page details from earlier visits (by route id and canonical id): a page opens with them at once
+ * while the server is asked for fresh ones.
+ */
+const metaCache = new Map<string, DocMeta>();
+const cacheMeta = (key: string, meta: DocMeta) => {
+  metaCache.set(key, meta);
+  metaCache.set(meta.doc.id, meta);
+};
+
 export function DocumentView(p: Props) {
   const { t, f, settings } = useSettings();
-  const [meta, setMeta] = useState<DocMeta | null>(null);
+  const [meta, setMetaState] = useState<DocMeta | null>(() => metaCache.get(p.id) ?? null);
+  const setMeta = (next: DocMeta | null) => {
+    if (next) cacheMeta(p.id, next);
+    setMetaState(next);
+  };
   const [missing, setMissing] = useState(false);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(() => metaCache.get(p.id)?.doc.title ?? "");
   const [status, setStatus] = useState<EditorStatus>("loading");
   const [iconOpen, setIconOpen] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -75,12 +89,14 @@ export function DocumentView(p: Props) {
         canShare: can(res, res.data.id, "share"),
         canDelete: can(res, res.data.id, "delete"),
       };
-      setMeta(next);
+      cacheMeta(p.id, next);
+      setMetaState(next);
       loadedId.current = res.data.id;
       if (!editingTitle.current) setTitle(res.data.title);
       pRef.current.onLoaded(next);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 404 || e.status === 403 || e.status === 400)) {
+        metaCache.delete(p.id);
         setMissing(true);
         pRef.current.onLoaded(null);
       } else pRef.current.onError(e);
@@ -88,7 +104,13 @@ export function DocumentView(p: Props) {
   }, [p.id]);
 
   useEffect(() => {
-    setMeta(null);
+    // From the last visit, if there was one; the server's answer replaces it.
+    const cached = metaCache.get(p.id) ?? null;
+    setMetaState(cached);
+    if (cached) {
+      loadedId.current = cached.doc.id;
+      pRef.current.onLoaded(cached);
+    }
     setMissing(false);
     editingTitle.current = false;
     void load();

@@ -14,6 +14,7 @@ import { useWorkspace } from "./lib/workspace";
 import type { EditorStatus, Heading } from "./editor/Editor";
 import type { PresenceUser } from "./editor/collab";
 import { OPEN_COLLECTION_EVENT } from "./editor/nodeviews";
+import { closeAll as closeAllCollab } from "./editor/collab";
 import { Sidebar, type DocTarget, type DropTarget } from "./components/Sidebar";
 import { DropdownMenu, PublishButton, Toolbar, type Crumb } from "./components/Toolbar";
 import { useDocumentActions } from "./components/DocumentActions";
@@ -742,6 +743,7 @@ function NotesApp({
 
   const doSignOut = () => {
     clearTray();
+    closeAllCollab();
     void signOut().finally(onSignedOut);
   };
 

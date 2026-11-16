@@ -10,7 +10,7 @@ import { ySyncPlugin, yCursorPlugin, yUndoPlugin } from "y-prosemirror";
 import { docIdFromHref, uploadAttachment, uploadAttachmentFromPath, webUrl, type Attachment, type User } from "../lib/api";
 import type { Translate } from "../lib/i18n";
 import { isTauri, openExternal, pickFiles } from "../lib/platform";
-import { connect, presence, unknownTypes, type CollabStatus, type PresenceUser } from "./collab";
+import { acquire, presence, unknownTypes, type CollabStatus, type PresenceUser } from "./collab";
 import { BubbleMenu, LINK_EVENT, PasteMenu, SuggestMenu } from "./menus";
 import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
@@ -115,13 +115,18 @@ export function Editor(props: Props) {
     const p = () => propsRef.current;
     p().onStatus("loading");
 
-    const collab = connect({
+    // Reuses the document's connection if it's still open from an earlier visit (see collab.ts).
+    const lease = acquire({
       server: p().server,
+      userId: p().user.id,
       documentId: docId,
       token: p().token,
       refreshToken: () => p().refreshToken(),
       onStatus: (s) => !destroyed && p().onStatus(s),
     });
+    const { collab } = lease;
+    /** Not worth keeping open once closed (a document this editor can't show). */
+    let discard = false;
     const { provider, fragment } = collab;
     provider.setAwarenessField("user", { id: p().user.id, name: p().user.name, color: p().user.color });
     const onAwareness = () => !destroyed && p().onPresence(presence(provider, p().user.id));
@@ -172,6 +177,7 @@ export function Editor(props: Props) {
       if (unknown.length) {
         setBlocked(unknown);
         p().onStatus("unsupported", unknown.join(", "));
+        discard = true;
         provider.disconnect();
         return;
       }
@@ -310,7 +316,7 @@ export function Editor(props: Props) {
       setView(null);
       setState(null);
       setBlocked(null);
-      collab.destroy();
+      lease.release(discard);
     };
   }, [docId, viewRef]);
 
