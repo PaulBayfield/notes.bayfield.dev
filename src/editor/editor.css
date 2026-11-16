@@ -465,8 +465,53 @@ button.doc-icon:hover {
   width: 50%;
   margin-right: 16px;
 }
-.doc-content .image-full-width img {
+.doc-content .image-full-width img,
+.doc-content .image-full-width .image-frame {
   width: 100%;
+}
+.doc-content .image-frame {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+.doc-content .image:not(.inline) img {
+  cursor: zoom-in;
+}
+.doc-content .media-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.doc-content .image-frame:hover .media-actions,
+.doc-content .image.ProseMirror-selectednode .media-actions {
+  opacity: 1;
+}
+.doc-content .media-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, #000 55%, transparent);
+  color: #fff;
+  cursor: pointer;
+}
+.doc-content .media-button:hover {
+  background: color-mix(in srgb, #000 75%, transparent);
+}
+.doc-content .attachment-card .media-button {
+  background: transparent;
+  color: var(--text-muted);
+}
+.doc-content .attachment-card .media-button:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 .doc-content .image-caption {
   font-size: 0.85em;

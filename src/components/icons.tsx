@@ -135,6 +135,18 @@ export const Check = (p: P) => (
     <path d="M20 6 9 17l-5-5" />
   </Icon>
 );
+export const ZoomIn = (p: P) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3M11 8v6M8 11h6" />
+  </Icon>
+);
+export const ZoomOut = (p: P) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3M8 11h6" />
+  </Icon>
+);
 export const Plus = (p: P) => (
   <Icon {...p}>
     <path d="M5 12h14" />

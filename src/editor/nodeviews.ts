@@ -11,6 +11,7 @@ import { dateLabel, dateLong, PICK_DATE_EVENT, withDay, type PickDateRequest } f
 import { pickableLanguages } from "./highlight";
 import { isMermaid, onThemeChange, renderMermaid } from "./mermaid";
 import { TextSelection, type Command } from "prosemirror-state";
+import { downloadMedia, fileNameFrom, viewImage } from "./media";
 
 export interface NodeViewHooks {
   /** Opens a link: internal documents in the app, the rest in the browser. */
@@ -272,17 +273,96 @@ class ToggleView implements NodeView {
   }
 }
 
-function imageView(node: Node): NodeView {
-  const img = el("img", { src: resolveUrl(node.attrs.src), alt: node.attrs.alt ?? "", draggable: "false", loading: "lazy" });
-  const layout = node.attrs.layoutClass as string | null;
-  const width = Number(node.attrs.width) || 0;
-  // Small inline images (icons) sit in the text; the rest are blocks with an optional caption.
-  const inline = layout === "inline" || (width > 0 && width <= 40);
-  if (width && !inline) img.style.width = `${width}px`;
-  if (width && inline) img.style.height = "1.2em";
-  const dom = el("span", { class: `image${inline ? " inline" : ""}${layout ? ` image-${layout}` : ""}`, contenteditable: "false" }, img);
-  if (node.attrs.alt && !inline) dom.append(el("span", { class: "image-caption" }, node.attrs.alt));
-  return { dom, ignoreMutation: () => true };
+/** The few words the node views show themselves (they live outside React and its strings). */
+function label(key: "viewImage" | "download"): string {
+  const fr = document.documentElement.lang === "fr";
+  switch (key) {
+    case "viewImage":
+      return fr ? "Agrandir" : "View full size";
+    case "download":
+      return fr ? "Télécharger" : "Download";
+  }
+}
+
+const ICONS = {
+  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  download: '<path d="M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5"/>',
+};
+
+function iconButton(icon: keyof typeof ICONS, title: string, onClick: () => void): HTMLButtonElement {
+  const button = el("button", { type: "button", class: "media-button", title, "aria-label": title, tabindex: "-1" });
+  const svg = document.createElementNS(SVG_NS, "svg");
+  for (const [k, v] of Object.entries({ width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" }))
+    svg.setAttribute(k, v);
+  svg.innerHTML = ICONS[icon];
+  button.append(svg);
+  // Not a click on the image: don't select it or move the cursor.
+  button.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return button;
+}
+
+/**
+ * An image. Small ones (icons) sit in the text; the rest are blocks with buttons to view them
+ * full size or download them, and their caption (Outline keeps it in `alt`) under them.
+ */
+class ImageView implements NodeView {
+  dom: HTMLElement;
+  private img: HTMLImageElement;
+  constructor(
+    private node: Node,
+    _view: EditorView,
+    _getPos: GetPos,
+  ) {
+    this.img = el("img", { draggable: "false", loading: "lazy" });
+    const layout = node.attrs.layoutClass as string | null;
+    const width = Number(node.attrs.width) || 0;
+    const inline = layout === "inline" || (width > 0 && width <= 40);
+    if (width && !inline) this.img.style.width = `${width}px`;
+    if (width && inline) this.img.style.height = "1.2em";
+    this.dom = el("span", { class: `image${inline ? " inline" : ""}${layout ? ` image-${layout}` : ""}`, contenteditable: "false" });
+    if (inline) {
+      this.dom.append(this.img);
+    } else {
+      const frame = el(
+        "span",
+        { class: "image-frame" },
+        this.img,
+        el(
+          "span",
+          { class: "media-actions" },
+          iconButton("expand", label("viewImage"), () => this.open()),
+          iconButton("download", label("download"), () => downloadMedia({ href: this.node.attrs.src, name: fileNameFrom(this.node.attrs.alt, "image") })),
+        ),
+      );
+      this.img.addEventListener("dblclick", () => this.open());
+      this.dom.append(frame);
+      if (node.attrs.alt) this.dom.append(el("span", { class: "image-caption" }, node.attrs.alt));
+    }
+    this.sync();
+  }
+  private open() {
+    viewImage({ src: this.node.attrs.src, caption: this.node.attrs.alt || null });
+  }
+  private sync() {
+    this.img.src = resolveUrl(this.node.attrs.src);
+    this.img.alt = this.node.attrs.alt ?? "";
+  }
+  update(node: Node) {
+    if (node.type !== this.node.type || node.attrs.layoutClass !== this.node.attrs.layoutClass || node.attrs.width !== this.node.attrs.width || node.attrs.alt !== this.node.attrs.alt) return false;
+    this.node = node;
+    this.sync();
+    return true;
+  }
+  ignoreMutation() {
+    return true;
+  }
 }
 
 function emojiView(node: Node): NodeView {
@@ -311,6 +391,8 @@ function attachmentView(node: Node, hooks: NodeViewHooks): NodeView {
     el("span", { class: "attachment-title" }, String(node.attrs.title ?? "File")),
     el("span", { class: "attachment-size" }, formatSize(Number(node.attrs.size))),
   );
+  if (node.attrs.href)
+    dom.append(iconButton("download", label("download"), () => downloadMedia({ href: node.attrs.href, name: fileNameFrom(node.attrs.title, "file") })));
   dom.addEventListener("dblclick", () => node.attrs.href && hooks.openLink(node.attrs.href));
   dom.title = "Double-click to open";
   return { dom, ignoreMutation: () => true };
@@ -409,7 +491,7 @@ export function nodeViews(hooks: NodeViewHooks): Record<string, NodeViewConstruc
     code_block: (node, view, getPos) => new CodeView(node, view, getPos),
     checkbox_item: (node, view, getPos) => new CheckboxView(node, view, getPos),
     container_toggle: (node) => new ToggleView(node, hooks),
-    image: (node) => imageView(node),
+    image: (node, view, getPos) => new ImageView(node, view, getPos),
     emoji: (node) => emojiView(node),
     attachment: (node) => attachmentView(node, hooks),
     embed: (node) => embedView(node, hooks),

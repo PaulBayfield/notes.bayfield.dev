@@ -948,3 +948,64 @@ textarea:disabled {
   }
 }
 
+
+/* ---------- Image viewer ---------- */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, #000 88%, transparent);
+  color: #fff;
+}
+.lightbox-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+.lightbox-bar .icon-button {
+  color: #fff;
+}
+.lightbox-bar .icon-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.lightbox-zoom {
+  min-width: 48px;
+  margin-right: 4px;
+  font-size: 12px;
+  text-align: right;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.lightbox-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  /* "safe" keeps a zoomed image's top-left reachable when it's larger than the window. */
+  place-items: safe center;
+  padding: 0 24px 24px;
+}
+.lightbox-stage img {
+  display: block;
+  border-radius: 4px;
+  cursor: zoom-out;
+  user-select: none;
+}
+.lightbox-stage.fitted img {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  cursor: zoom-in;
+}
+.lightbox-caption {
+  flex-shrink: 0;
+  padding: 0 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.85;
+}

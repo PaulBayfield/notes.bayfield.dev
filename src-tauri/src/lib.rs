@@ -485,18 +485,20 @@ async fn download(
         let body: serde_json::Value = res.json().await.unwrap_or_default();
         return Err(body["message"].as_str().map(str::to_owned).unwrap_or_else(|| format!("Download failed ({status})")));
     }
-    let zip = res
+    let content_type = res
         .headers()
         .get("content-type")
         .and_then(|v| v.to_str().ok())
-        .is_some_and(|t| t.contains("zip"));
+        .unwrap_or_default()
+        .to_owned();
+    let zip = content_type.contains("zip");
     let bytes = res.bytes().await.map_err(|e| format!("Download failed: {e}"))?;
     // A TextBundle (.textpack) is a zip already.
     let name = if zip && !name.ends_with(".zip") && !name.ends_with(".textpack") {
         let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(&name);
         format!("{stem}.zip")
     } else {
-        name
+        with_extension(name, &content_type)
     };
     let mut dialog = app.dialog().file().set_file_name(&name);
     if let Some(window) = app.get_webview_window("main") {
@@ -508,6 +510,28 @@ async fn download(
     let path = path.into_path().map_err(err)?;
     tokio::fs::write(path, &bytes).await.map_err(err)?;
     Ok(true)
+}
+
+/// `photo` + `image/png` → `photo.png` (images and files saved under their caption or title).
+/// Names that already have an extension stay as they are.
+fn with_extension(name: String, content_type: &str) -> String {
+    let has_ext = name
+        .rsplit_once('.')
+        .is_some_and(|(stem, ext)| !stem.is_empty() && (1..=5).contains(&ext.len()) && ext.chars().all(|c| c.is_ascii_alphanumeric()));
+    if has_ext {
+        return name;
+    }
+    let sub = content_type.split(';').next().and_then(|t| t.split('/').nth(1)).unwrap_or("").trim();
+    let ext = match sub {
+        "jpeg" => "jpg",
+        "svg+xml" => "svg",
+        other => other.trim_start_matches("x-").split('+').next().unwrap_or(""),
+    };
+    if (1..=5).contains(&ext.len()) && ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+        format!("{name}.{ext}")
+    } else {
+        name
+    }
 }
 
 /// Asks for files to attach. Returns their paths (empty if cancelled).

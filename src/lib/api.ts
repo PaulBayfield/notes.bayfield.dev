@@ -542,7 +542,30 @@ export async function downloadFile(method: string, body: object, name: string, a
     throw new ApiError(json?.message || `${method} failed (${res.status})`, res.status);
   }
   const blob = await res.blob();
-  saveBlob(blob.type.includes("zip") ? zipName(name) : name, blob);
+  saveBlob(blob.type.includes("zip") ? zipName(name) : withExtension(name, blob.type), blob);
+  return true;
+}
+
+/** `photo` + `image/png` → `photo.png`; names that have an extension stay as they are. */
+function withExtension(name: string, type: string): string {
+  if (/\.[a-z0-9]{1,5}$/i.test(name)) return name;
+  const sub = type.split(";")[0].split("/")[1]?.trim();
+  if (!sub) return name;
+  const ext = sub === "jpeg" ? "jpg" : sub === "svg+xml" ? "svg" : sub.replace(/^x-/, "").split("+")[0];
+  return /^[a-z0-9]{1,5}$/i.test(ext) ? `${name}.${ext}` : name;
+}
+
+/**
+ * Saves an image or file from a document. Outline attachments come through the API (they need
+ * the session); links to other sites open in the browser, which downloads them.
+ */
+export async function downloadAttachment(href: string, name: string): Promise<boolean> {
+  const id = href.match(/\/api\/attachments\.redirect\?(?:.*&)?id=([\w-]+)/)?.[1];
+  if (id) return downloadFile("attachments.redirect", { id }, name);
+  if (isTauri) {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(href);
+  } else window.open(href, "_blank", "noopener");
   return true;
 }
 

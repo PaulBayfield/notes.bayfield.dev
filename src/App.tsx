@@ -31,6 +31,7 @@ import { SignIn } from "./components/SignIn";
 import { DocListPage } from "./components/DocListPage";
 import { ShareButton } from "./components/ShareButton";
 import { DatePickerHost } from "./components/DatePicker";
+import { MediaHost } from "./components/MediaHost";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 import { setSmartText } from "./editor/rules";
 
@@ -700,6 +701,7 @@ function NotesApp({
         />
       )}
       <DatePickerHost />
+      <MediaHost onError={onError} />
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       <ErrorStack errors={errors.errors} onDismiss={errors.dismiss} />
       <Tooltips />
