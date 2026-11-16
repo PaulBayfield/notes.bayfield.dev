@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { EditorView } from "prosemirror-view";
 import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isMac, isTauri, isWindows, openExternal } from "./lib/platform";
 import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
-import { parseRoute, routePath, useTabs, type Route } from "./lib/router";
+import { parseRoute, parseTabPath, routePath, tabPath, useTabs, type Route } from "./lib/router";
 import { SettingsProvider, forServer, useSettings } from "./lib/settings";
 import { rememberAccount } from "./lib/accounts";
 import { WorkspaceDialog } from "./components/WorkspaceDialog";
@@ -34,6 +34,7 @@ import { ShareButton } from "./components/ShareButton";
 import { DatePickerHost } from "./components/DatePicker";
 import { MediaHost } from "./components/MediaHost";
 import { TabBar, type TabInfo } from "./components/TabBar";
+import { Pane } from "./components/Pane";
 import { EntityIcon } from "./components/EntityIcon";
 import { Archive, FileText, Home as HomeIcon, Pencil, Trash } from "./components/icons";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
@@ -163,7 +164,20 @@ function NotesApp({
   const [draftComment, setDraftComment] = useState<string | null>(null);
   const [activeComment, setActiveComment] = useState<string | null>(null);
   const [docTick, setDocTick] = useState(0);
-  const viewRef = useRef<EditorView | null>(null);
+  /** Each pane's editor (split view has two); `viewRef` is the focused one's. */
+  const paneViews = useRef<RefObject<EditorView | null>[]>([{ current: null }, { current: null }]).current;
+  const focusRef = useRef(0);
+  const viewRef = useMemo<RefObject<EditorView | null>>(
+    () => ({
+      get current() {
+        return paneViews[focusRef.current].current;
+      },
+      set current(v) {
+        paneViews[focusRef.current].current = v;
+      },
+    }),
+    [paneViews],
+  );
   /** A comment to show once its page opens (from a notification). */
   const pendingComment = useRef<string | null>(null);
 
@@ -185,10 +199,12 @@ function NotesApp({
   useDesktopSync(settings.closeToTray, settings.startMinimized, t);
   // Reopens the tabs that were open (or, before tabs, the last page visited).
   const router = useTabs(
-    settings.tabs.length ? settings.tabs.map(parseRoute) : [settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" }],
+    settings.tabs.length ? settings.tabs.map(parseTabPath) : [[settings.lastPath ? parseRoute(settings.lastPath) : { name: "home" }]],
     settings.activeTab,
   );
   const { route, navigate } = router;
+  focusRef.current = router.tab.focus;
+  const split = router.tab.panes.length > 1;
   /** The page reopened on launch, until it loads: if it's gone, go home instead. */
   const reopened = useRef(route.name === "doc" ? route.id : null);
 
@@ -217,11 +233,27 @@ function NotesApp({
   }, [collaboratorKey]);
 
   // Remember the open tabs for next time.
-  const tabPaths = router.tabs.map((tab) => routePath(router.currentRoute(tab))).join("|");
+  const tabPaths = JSON.stringify(router.tabs.map(tabPath));
   useEffect(() => {
-    update({ tabs: tabPaths.split("|"), activeTab: router.active });
+    update({ tabs: JSON.parse(tabPaths) as string[], activeTab: router.active });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabPaths, router.active]);
+
+  // Split view: what each pane's document reported, so the toolbar and panel can follow the
+  // focus from one side to the other without reloading anything.
+  const paneState = useRef(new Map<string, { meta?: DocMeta | null; headings?: Heading[]; status?: EditorStatus; presence?: PresenceUser[] }>());
+  const paneKey = (pane: number) => `${router.tab.id}:${pane}`;
+  const focusKey = paneKey(router.tab.focus);
+  useEffect(() => {
+    const st = paneState.current.get(focusKey);
+    const m = st?.meta && route.name === "doc" && (st.meta.doc.id === route.id || st.meta.doc.urlId === route.id) ? st.meta : null;
+    setMeta(m);
+    setHeadings(m ? (st?.headings ?? []) : []);
+    setDocStatus(m ? st?.status : undefined);
+    setPresence(m ? (st?.presence ?? []) : []);
+    setDocTick((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey]);
 
   // Remember where we were, and reset per-document state when leaving a document.
   useEffect(() => {
@@ -334,6 +366,7 @@ function NotesApp({
     meta,
     viewRef,
     go,
+    openSplit: router.openSplit,
     newDoc,
     onError,
     flash,
@@ -419,6 +452,8 @@ function NotesApp({
     // Tabs, as in a browser.
     else if (ctrl && !e.altKey && !e.shiftKey && k === "t") router.openTab();
     else if (ctrl && !e.altKey && e.shiftKey && k === "t") router.reopenClosedTab();
+    // In split view it closes the focused side first.
+    else if (ctrl && !e.altKey && !e.shiftKey && k === "w" && split) router.closePane(router.tab.focus);
     else if (ctrl && !e.altKey && !e.shiftKey && k === "w" && router.tabs.length > 1) router.closeTab();
     else if (e.ctrlKey && !e.altKey && (e.key === "Tab" || e.key === "PageDown" || e.key === "PageUp")) {
       const dir = e.key === "PageUp" || (e.key === "Tab" && e.shiftKey) ? -1 : 1;
@@ -430,8 +465,9 @@ function NotesApp({
     else return;
     e.preventDefault();
   };
-  const contextRef = useRef({ t, openDocument: (id: string, newTab?: boolean) => go({ name: "doc", id }, newTab) });
-  contextRef.current = { t, openDocument: (id: string, newTab?: boolean) => go({ name: "doc", id }, newTab) };
+  const openSplitDoc = (id: string) => router.openSplit({ name: "doc", id });
+  const contextRef = useRef({ t, openDocument: (id: string, newTab?: boolean) => go({ name: "doc", id }, newTab), openSplit: openSplitDoc });
+  contextRef.current = { t, openDocument: (id: string, newTab?: boolean) => go({ name: "doc", id }, newTab), openSplit: openSplitDoc };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => keyHandler.current(e);
     // Mouse back/forward buttons.
@@ -562,14 +598,19 @@ function NotesApp({
       }
     }
   };
-  const tabs: TabInfo[] = router.tabs.map((tab) => ({ id: tab.id, ...tabInfo(router.currentRoute(tab)) }));
+  // A split tab is named after both its pages, the focused one first.
+  const tabs: TabInfo[] = router.tabs.map((tab) => {
+    const main = tabInfo(router.currentRoute(tab));
+    const other = tab.panes.length > 1 ? tabInfo(router.paneRoute(tab.panes[1 - tab.focus])) : null;
+    return { id: tab.id, ...main, title: other ? `${main.title} | ${other.title}` : main.title };
+  });
   const tabMenu = (index: number, e: MouseEvent) =>
     setMenu({
       x: e.clientX,
       y: e.clientY,
       items: [
         { label: t("newTab"), kbd: `${isMac ? "⌘" : "Ctrl"}+T`, onClick: () => router.openTab() },
-        { label: t("duplicateTab"), onClick: () => router.openTab(router.currentRoute(router.tabs[index])) },
+        { label: t("duplicateTab"), onClick: () => router.duplicateTab(index) },
         { kind: "separator" },
         { label: t("closeTab"), kbd: `${isMac ? "⌘" : "Ctrl"}+W`, onClick: () => router.closeTab(index) },
         {
@@ -590,6 +631,112 @@ function NotesApp({
         { label: t("reopenClosedTab"), kbd: `${isMac ? "⌘" : "Ctrl"}+Shift+T`, onClick: router.reopenClosedTab },
       ],
     });
+
+  // ---------- Pages (split view) ----------
+
+  /** A page in pane `pane`; only the focused one drives the toolbar, the panel and the title. */
+  const renderPage = (r: Route, pane: number, focused: boolean) => {
+    const key = paneKey(pane);
+    const isFocused = () => focusRef.current === pane;
+    const remember = (patch: { meta?: DocMeta | null; headings?: Heading[]; status?: EditorStatus; presence?: PresenceUser[] }) =>
+      paneState.current.set(key, { ...paneState.current.get(key), ...patch });
+    if (r.name === "doc")
+      return (
+        <DocumentView
+          key={r.id}
+          id={r.id}
+          focused={focused}
+          server={session.server}
+          token={token}
+          user={session.user}
+          autoFocusTitle={freshDocId === r.id}
+          subPages={workspace.locate(r.id)?.node.children ?? []}
+          refreshToken={refreshToken}
+          onLoaded={(m) => {
+            remember({ meta: m });
+            if (m) {
+              knownTitles.current.set(r.id, m.doc.title);
+              knownTitles.current.set(m.doc.id, m.doc.title);
+            }
+            if (!isFocused()) return;
+            if (!m && reopened.current === r.id) navigate({ name: "home" }, true);
+            reopened.current = null;
+            setMeta(m);
+          }}
+          onTitleChange={(id, title) => {
+            workspace.renameLocal(id, title);
+            const st = paneState.current.get(key)?.meta;
+            if (st && st.doc.id === id) remember({ meta: { ...st, doc: { ...st.doc, title } } });
+            if (isFocused()) setMeta((m) => (m && m.doc.id === id ? { ...m, doc: { ...m.doc, title } } : m));
+          }}
+          onOpenDocument={(id, newTab) => go({ name: "doc", id }, newTab)}
+          onStatus={(st) => {
+            remember({ status: st });
+            if (isFocused()) setDocStatus(st);
+          }}
+          onPresence={(users) => {
+            remember({ presence: users });
+            if (isFocused()) setPresence(users);
+          }}
+          onHeadings={(h) => {
+            remember({ headings: h });
+            if (!isFocused()) return;
+            setHeadings(h);
+            setDocTick((n) => n + 1);
+          }}
+          onError={onError}
+          onStartComment={(id) => {
+            setDraftComment(id);
+            setPanelTab("comments");
+            update({ panel: true });
+          }}
+          onCommentClick={(id) => {
+            setActiveComment(id);
+            setPanelTab("comments");
+            update({ panel: true });
+          }}
+          viewRef={paneViews[pane]}
+          reloadKey={reloadKey}
+          findOpen={focused && actions.findOpen}
+          onCloseFind={() => {
+            actions.setFindOpen(false);
+            paneViews[pane].current?.focus();
+          }}
+        />
+      );
+    if (r.name === "drafts" || r.name === "archive" || r.name === "trash")
+      return <DocListPage page={r.name} workspace={workspace} onNavigate={go} onError={onError} flash={(m) => flash(m)} />;
+    if (r.name === "collection")
+      return (
+        <CollectionView
+          id={r.id}
+          workspace={workspace}
+          user={session.user}
+          onNavigate={go}
+          onNewDoc={(c) => void newDoc(c)}
+          onEdit={actions.editCollection}
+          onError={onError}
+        />
+      );
+    return <Home workspace={workspace} onNavigate={go} onError={onError} />;
+  };
+
+  /** Dragging the line between the two sides of a split view. */
+  const panesRef = useRef<HTMLDivElement>(null);
+  const startSplitResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const box = panesRef.current?.getBoundingClientRect();
+    if (!box || e.button !== 0) return;
+    e.preventDefault();
+    const onMove = (m: PointerEvent) => update({ splitRatio: Math.min(0.8, Math.max(0.2, (m.clientX - box.left) / box.width)) });
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("resizing-split");
+    };
+    document.body.classList.add("resizing-split");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
@@ -671,6 +818,8 @@ function NotesApp({
           user={session.user}
           panelVisible={panelVisible}
           onTogglePanel={togglePanel}
+          split={split}
+          onToggleSplit={() => (split ? router.closePane(router.tab.focus) : router.openSplit())}
           onOpenSettings={() => setSettingsOpen(true)}
           notifications={
             <NotificationsButton
@@ -716,66 +865,23 @@ function NotesApp({
             </span>
           </div>
         )}
-        {route.name === "doc" ? (
-          <DocumentView
-            key={route.id}
-            id={route.id}
-            server={session.server}
-            token={token}
-            user={session.user}
-            autoFocusTitle={freshDocId === route.id}
-            subPages={workspace.locate(route.id)?.node.children ?? []}
-            refreshToken={refreshToken}
-            onLoaded={(m) => {
-              if (!m && reopened.current === route.id) navigate({ name: "home" }, true);
-              reopened.current = null;
-              setMeta(m);
-            }}
-            onTitleChange={(id, title) => {
-              workspace.renameLocal(id, title);
-              setMeta((m) => (m && m.doc.id === id ? { ...m, doc: { ...m.doc, title } } : m));
-            }}
-            onOpenDocument={(id, newTab) => go({ name: "doc", id }, newTab)}
-            onStatus={setDocStatus}
-            onPresence={setPresence}
-            onHeadings={(h) => {
-              setHeadings(h);
-              setDocTick((n) => n + 1);
-            }}
-            onError={onError}
-            onStartComment={(id) => {
-              setDraftComment(id);
-              setPanelTab("comments");
-              update({ panel: true });
-            }}
-            onCommentClick={(id) => {
-              setActiveComment(id);
-              setPanelTab("comments");
-              update({ panel: true });
-            }}
-            viewRef={viewRef}
-            reloadKey={reloadKey}
-            findOpen={actions.findOpen}
-            onCloseFind={() => {
-              actions.setFindOpen(false);
-              viewRef.current?.focus();
-            }}
-          />
-        ) : route.name === "drafts" || route.name === "archive" || route.name === "trash" ? (
-          <DocListPage page={route.name} workspace={workspace} onNavigate={go} onError={onError} flash={(m) => flash(m)} />
-        ) : route.name === "collection" ? (
-          <CollectionView
-            id={route.id}
-            workspace={workspace}
-            user={session.user}
-            onNavigate={go}
-            onNewDoc={(c) => void newDoc(c)}
-            onEdit={actions.editCollection}
-            onError={onError}
-          />
-        ) : (
-          <Home workspace={workspace} onNavigate={go} onError={onError} />
-        )}
+        <div className={`panes${split ? " split" : ""}`} ref={panesRef}>
+          {router.tab.panes.map((pane, i) => (
+            <Fragment key={`${router.tab.id}:${i}`}>
+              {i > 0 && <div className="pane-divider" role="separator" aria-orientation="vertical" onPointerDown={startSplitResize} onDoubleClick={() => update({ splitRatio: 0.5 })} />}
+              <Pane
+                scrollKey={`${router.tab.id}:${i}:${pane.index}:${routePath(router.paneRoute(pane))}`}
+                focused={i === router.tab.focus}
+                split={split}
+                onFocus={() => router.focusPane(i)}
+                onClose={() => router.closePane(i)}
+                style={split ? { flexBasis: `${(i === 0 ? settings.splitRatio : 1 - settings.splitRatio) * 100}%` } : undefined}
+              >
+                {renderPage(router.paneRoute(pane), i, i === router.tab.focus)}
+              </Pane>
+            </Fragment>
+          ))}
+        </div>
       </main>
       {panelVisible && (
         <Panel

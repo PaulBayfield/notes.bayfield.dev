@@ -1116,3 +1116,71 @@ textarea:disabled {
   height: 26px;
   min-width: 26px;
 }
+
+/* ---------- Split view ---------- */
+
+.panes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.pane {
+  position: relative;
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pane > .doc-scroll,
+.pane > .empty-state {
+  flex: 1;
+  min-height: 0;
+}
+.pane.split {
+  flex-grow: 0;
+  flex-shrink: 1;
+}
+/* The side the toolbar acts on: a line along its top. */
+.pane.split::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  z-index: 3;
+  background: transparent;
+}
+.pane.split.focused::before {
+  background: var(--primary);
+}
+.pane-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.12s;
+  background: var(--bg);
+}
+.pane.split:hover .pane-close,
+.pane-close:focus-visible {
+  opacity: 1;
+}
+.pane-divider {
+  flex: none;
+  width: 5px;
+  margin: 0 -2px;
+  z-index: 5;
+  cursor: col-resize;
+  background: linear-gradient(to right, transparent 2px, var(--border-strong) 2px, var(--border-strong) 3px, transparent 3px);
+}
+.pane-divider:hover,
+body.resizing-split .pane-divider {
+  background: linear-gradient(to right, transparent 1px, var(--primary) 1px, var(--primary) 4px, transparent 4px);
+}
+body.resizing-split {
+  cursor: col-resize;
+  user-select: none;
+}
+body.resizing-split iframe {
+  pointer-events: none;
+}

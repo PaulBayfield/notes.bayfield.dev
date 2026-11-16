@@ -7,13 +7,14 @@ import type { Translate } from "../lib/i18n";
 import { mod, openExternal } from "../lib/platform";
 import { editorAt } from "../editor/registry";
 import { menu, type MenuEntry } from "./Menu";
-import { ArrowLeft, ArrowRight, ClipboardPaste, Copy, External, LinkIcon, MessageSquare, NewTab, Repeat, Scissors } from "./icons";
+import { ArrowLeft, ArrowRight, ClipboardPaste, Columns, Copy, External, LinkIcon, MessageSquare, NewTab, Repeat, Scissors } from "./icons";
 
 interface Context {
   t: Translate;
   back: () => void;
   forward: () => void;
   openDocument: (id: string, newTab?: boolean) => void;
+  openSplit: (id: string) => void;
 }
 
 const key = (combo: string) => `${mod}+${combo}`;
@@ -57,6 +58,7 @@ function linkItems(href: string, c: Context): (MenuEntry | false)[] {
   return [
     { label: c.t("openLink"), icon: <External size={15} />, onClick: () => (id ? c.openDocument(id) : void openExternal(url)) },
     !!id && { label: c.t("openInNewTab"), icon: <NewTab size={15} />, onClick: () => c.openDocument(id, true) },
+    !!id && { label: c.t("openInSplitView"), icon: <Columns size={15} />, onClick: () => c.openSplit(id) },
     { label: c.t("copyLink"), icon: <LinkIcon size={15} />, onClick: () => void navigator.clipboard.writeText(url) },
     { kind: "separator" },
   ];

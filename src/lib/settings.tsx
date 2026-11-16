@@ -27,9 +27,11 @@ export interface Settings {
   lastServer: string;
   /** Reopened on launch: the open tab's page. */
   lastPath: string;
-  /** Reopened on launch: every open tab's page, and which one was open. */
+  /** Reopened on launch: every open tab's page (both, for a split tab), and which one was open. */
   tabs: string[];
   activeTab: number;
+  /** Split view: the left side's share of the width. */
+  splitRatio: number;
   /** Desktop: the close button hides the window to the tray instead of quitting. */
   closeToTray: boolean;
   /** Desktop: when launched at startup, stay in the tray. */
@@ -77,6 +79,7 @@ const DEFAULTS: Settings = {
   lastPath: "",
   tabs: [],
   activeTab: 0,
+  splitRatio: 0.5,
   closeToTray: true,
   startMinimized: true,
   skippedUpdate: "",

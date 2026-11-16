@@ -135,6 +135,12 @@ export const Check = (p: P) => (
     <path d="M20 6 9 17l-5-5" />
   </Icon>
 );
+export const Columns = (p: P) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M12 4v16" />
+  </Icon>
+);
 export const NewTab = (p: P) => (
   <Icon {...p}>
     <rect x="3" y="4" width="18" height="16" rx="2" />

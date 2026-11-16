@@ -25,6 +25,8 @@ export interface DocMeta {
 
 interface Props {
   id: string;
+  /** In split view, the side with the focus (the contents panel follows its scrolling). */
+  focused: boolean;
   server: string;
   token: string;
   user: User;
@@ -179,7 +181,7 @@ export function DocumentView(p: Props) {
   ].join("\n");
 
   return (
-    <div className="doc-scroll" id="doc-scroll">
+    <div className="doc-scroll" id={p.focused ? "doc-scroll" : undefined}>
       {p.findOpen && <FindBar viewRef={p.viewRef} editable={editable} onClose={p.onCloseFind} />}
       <article className={`doc${settings.fullWidth || doc.fullWidth ? " full-width" : ""} font-${settings.font}`} style={{ fontSize: settings.fontSize }}>
         {doc.icon && editable ? (

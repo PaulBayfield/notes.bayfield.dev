@@ -63,6 +63,7 @@ import {
   MessageSquare,
   MoveIcon,
   NewTab,
+  Columns,
   Pencil,
   PinIcon,
   Play,
@@ -79,6 +80,8 @@ interface Params {
   meta: DocMeta | null;
   viewRef: RefObject<EditorView | null>;
   go: (r: Route, newTab?: boolean) => void;
+  /** Opens a page beside the open one (split view). */
+  openSplit: (r: Route) => void;
   newDoc: (collectionId?: string, parentDocumentId?: string) => Promise<void>;
   onError: (e: unknown) => void;
   flash: (message: string, undo?: () => void, label?: string) => void;
@@ -192,6 +195,7 @@ export function useDocumentActions(p: Params) {
   const treeMenu = (target: DocTarget): MenuEntry[] =>
     menu([
       { label: t("openInNewTab"), icon: <NewTab size={15} />, onClick: () => p.go({ name: "doc", id: target.id }, true) },
+      { label: t("openInSplitView"), icon: <Columns size={15} />, onClick: () => p.openSplit({ name: "doc", id: target.id }) },
       { kind: "separator" },
       { label: t("newChild"), icon: <FilePlus size={15} />, onClick: () => void p.newDoc(target.collectionId, target.id) },
       { label: t(isStarred(target.id) ? "unstar" : "star"), icon: <Star size={15} filled={!!isStarred(target.id)} />, onClick: toggleStar(target.id) },

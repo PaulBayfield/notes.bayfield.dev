@@ -8,7 +8,7 @@ import { MenuList, type MenuEntry } from "./Menu";
 import { Avatar, HoverCard, PresenceCard } from "./Avatar";
 import { userDetails, type Collection } from "../lib/api";
 import { EntityIcon } from "./EntityIcon";
-import { ArrowLeft, ArrowRight, More, PanelLeft, PanelRight, Star, WinMaximize, WinMinimize, X } from "./icons";
+import { ArrowLeft, ArrowRight, Columns, More, PanelLeft, PanelRight, Star, WinMaximize, WinMinimize, X } from "./icons";
 
 export interface Crumb {
   label: string;
@@ -38,6 +38,9 @@ interface Props {
   user: User;
   panelVisible: boolean;
   onTogglePanel: () => void;
+  /** Split view: two pages side by side. */
+  split: boolean;
+  onToggleSplit: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
   /** The notifications bell. */
@@ -90,6 +93,9 @@ export function Toolbar(p: Props) {
       {p.docMenu}
       {p.notifications}
       <AccountMenu user={p.user} onOpenSettings={p.onOpenSettings} onSignOut={p.onSignOut} />
+      <button className={`icon-button${p.split ? " active" : ""}`} title={t(p.split ? "closeSplitView" : "splitView")} aria-pressed={p.split} onClick={p.onToggleSplit}>
+        <Columns />
+      </button>
       <button
         className={`icon-button panel-toggle${p.panelVisible ? " active" : ""}`}
         title={`${t("togglePanel")} (.)`}
