@@ -513,11 +513,35 @@ button.doc-icon:hover {
   background: var(--hover);
   color: var(--text);
 }
+/* The caption: an input that reads as text. Empty, it only shows (as a hint) while editing,
+   once the image is selected. */
 .doc-content .image-caption {
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
   font-size: 0.85em;
   color: var(--text-muted);
-  margin-top: 4px;
   text-align: center;
+  outline: none;
+}
+.doc-content .image-caption::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.doc-content .image-caption:focus {
+  background: var(--hover);
+}
+.doc-content .image:not(.has-caption):not(.ProseMirror-selectednode) .image-caption:not(:focus),
+.doc-content .ProseMirror:not([contenteditable="true"]) .image:not(.has-caption) .image-caption {
+  display: none;
+}
+.doc-content .ProseMirror:not([contenteditable="true"]) .image-caption {
+  pointer-events: none;
 }
 .doc-content .ProseMirror-selectednode,
 .doc-content .image.ProseMirror-selectednode img {

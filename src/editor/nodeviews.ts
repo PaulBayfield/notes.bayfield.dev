@@ -10,7 +10,7 @@ import { CODE_LANGUAGES } from "./codeLanguages";
 import { dateLabel, dateLong, PICK_DATE_EVENT, withDay, type PickDateRequest } from "./dates";
 import { pickableLanguages } from "./highlight";
 import { isMermaid, onThemeChange, renderMermaid } from "./mermaid";
-import { TextSelection, type Command } from "prosemirror-state";
+import { Selection, TextSelection, type Command } from "prosemirror-state";
 import { downloadMedia, fileNameFrom, viewImage } from "./media";
 
 export interface NodeViewHooks {
@@ -274,9 +274,11 @@ class ToggleView implements NodeView {
 }
 
 /** The few words the node views show themselves (they live outside React and its strings). */
-function label(key: "viewImage" | "download"): string {
+function label(key: "caption" | "viewImage" | "download"): string {
   const fr = document.documentElement.lang === "fr";
   switch (key) {
+    case "caption":
+      return fr ? "Ajouter une légende…" : "Write a caption…";
     case "viewImage":
       return fr ? "Agrandir" : "View full size";
     case "download":
@@ -310,15 +312,17 @@ function iconButton(icon: keyof typeof ICONS, title: string, onClick: () => void
 
 /**
  * An image. Small ones (icons) sit in the text; the rest are blocks with buttons to view them
- * full size or download them, and their caption (Outline keeps it in `alt`) under them.
+ * full size or download them, and a caption under them (Outline keeps it in `alt`) that can be
+ * edited in place.
  */
 class ImageView implements NodeView {
   dom: HTMLElement;
   private img: HTMLImageElement;
+  private caption: HTMLInputElement | null = null;
   constructor(
     private node: Node,
-    _view: EditorView,
-    _getPos: GetPos,
+    private view: EditorView,
+    private getPos: GetPos,
   ) {
     this.img = el("img", { draggable: "false", loading: "lazy" });
     const layout = node.attrs.layoutClass as string | null;
@@ -342,8 +346,27 @@ class ImageView implements NodeView {
         ),
       );
       this.img.addEventListener("dblclick", () => this.open());
-      this.dom.append(frame);
-      if (node.attrs.alt) this.dom.append(el("span", { class: "image-caption" }, node.attrs.alt));
+      this.caption = el("input", { class: "image-caption", type: "text", placeholder: label("caption"), spellcheck: "true" });
+      this.caption.addEventListener("pointerdown", () => {
+        if (this.caption) this.caption.readOnly = !this.view.editable;
+      });
+      this.caption.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === "ArrowDown") {
+          e.preventDefault();
+          this.commit();
+          this.leave(1);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          this.commit();
+          this.leave(-1);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          this.sync();
+          this.leave(1);
+        }
+      });
+      this.caption.addEventListener("blur", () => this.commit());
+      this.dom.append(frame, this.caption);
     }
     this.sync();
   }
@@ -353,12 +376,35 @@ class ImageView implements NodeView {
   private sync() {
     this.img.src = resolveUrl(this.node.attrs.src);
     this.img.alt = this.node.attrs.alt ?? "";
+    if (this.caption && document.activeElement !== this.caption) this.caption.value = this.node.attrs.alt ?? "";
+    this.dom.classList.toggle("has-caption", !!this.node.attrs.alt);
+  }
+  /** Saves the caption as typed (an empty one removes it). */
+  private commit() {
+    if (!this.caption || !this.view.editable) return;
+    const alt = this.caption.value.trim() || null;
+    const pos = this.getPos();
+    if (pos === undefined || alt === (this.node.attrs.alt || null)) return;
+    this.view.dispatch(this.view.state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, alt }));
+  }
+  /** Back to the text, after the image (1) or before it (-1). */
+  private leave(dir: 1 | -1) {
+    const pos = this.getPos();
+    if (pos === undefined) return;
+    const { state } = this.view;
+    const at = Math.min(dir > 0 ? pos + this.node.nodeSize : pos, state.doc.content.size);
+    this.view.dispatch(state.tr.setSelection(Selection.near(state.doc.resolve(at), dir)));
+    this.view.focus();
   }
   update(node: Node) {
-    if (node.type !== this.node.type || node.attrs.layoutClass !== this.node.attrs.layoutClass || node.attrs.width !== this.node.attrs.width || node.attrs.alt !== this.node.attrs.alt) return false;
+    if (node.type !== this.node.type || node.attrs.layoutClass !== this.node.attrs.layoutClass || node.attrs.width !== this.node.attrs.width) return false;
     this.node = node;
     this.sync();
     return true;
+  }
+  /** The caption is a plain input: its typing and clicks are its own, not the editor's. */
+  stopEvent(e: Event) {
+    return !!this.caption && e.target === this.caption;
   }
   ignoreMutation() {
     return true;
