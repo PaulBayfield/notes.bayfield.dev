@@ -33,7 +33,10 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 tauri-plugin-process = "2.4.0"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
+# Spelling suggestions from WebView2's own right-click menu (same versions as Tauri's).
+webview2-com = "0.39"
+windows-core = "0.62"
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2.14.1"

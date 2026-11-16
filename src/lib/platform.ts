@@ -1,6 +1,6 @@
 export const isTauri = "__TAURI_INTERNALS__" in window;
 export const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
-const isWindows = /Windows/.test(navigator.userAgent);
+export const isWindows = /Windows/.test(navigator.userAgent);
 
 /**
  * Where API calls go. Desktop: the `notes://` protocol, which the Rust side forwards to the

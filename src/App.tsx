@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import type { EditorView } from "prosemirror-view";
 import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
-import { isMac, isTauri, openExternal } from "./lib/platform";
+import { isMac, isTauri, isWindows, openExternal } from "./lib/platform";
 import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
 import { parseRoute, routePath, useTabs, type Route } from "./lib/router";
 import { SettingsProvider, forServer, useSettings } from "./lib/settings";
@@ -17,7 +17,8 @@ import { OPEN_COLLECTION_EVENT } from "./editor/nodeviews";
 import { Sidebar, type DocTarget, type DropTarget } from "./components/Sidebar";
 import { DropdownMenu, PublishButton, Toolbar, type Crumb } from "./components/Toolbar";
 import { useDocumentActions } from "./components/DocumentActions";
-import type { MenuEntry } from "./components/Menu";
+import { menu as tidyMenu, type MenuEntry } from "./components/Menu";
+import { editorAt } from "./editor/registry";
 import { DocumentView, type DocMeta } from "./components/DocumentView";
 import { CollectionView, Home } from "./components/Home";
 import { SearchDialog } from "./components/SearchDialog";
@@ -37,6 +38,9 @@ import { EntityIcon } from "./components/EntityIcon";
 import { Archive, FileText, Home as HomeIcon, Pencil, Trash } from "./components/icons";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 import { setSmartText } from "./editor/rules";
+
+/** Desktop on Windows: WebView2's spelling suggestions are added to the editor's right-click menu. */
+const NATIVE_SPELLING = isTauri && isWindows;
 
 export default function App() {
   return (
@@ -145,7 +149,8 @@ function NotesApp({
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
   /** The open settings page, if any. */
   const [settingsOpen, setSettingsOpen] = useState<SettingsPage | true | false>(false);
-  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
+  /** The open right-click menu. `onDismiss` runs when it closes, whatever closed it. */
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[]; onDismiss?: () => void } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [meta, setMeta] = useState<DocMeta | null>(null);
   const [docStatus, setDocStatus] = useState<EditorStatus | undefined>();
@@ -442,6 +447,12 @@ function NotesApp({
       if (e.defaultPrevented || e.shiftKey || !(e.target instanceof Element)) return;
       const items = contextMenuFor(e.target, e.clientX, e.clientY, { ...contextRef.current, back: router.back, forward: router.forward });
       if (!items?.length) return;
+      // In the editor the native menu is let through: the desktop app catches it before it
+      // opens and hands over its spelling suggestions, which go at the top of ours.
+      if (NATIVE_SPELLING && editorAt(e.target)?.view.editable) {
+        spellingMenu.current = { x: e.clientX, y: e.clientY, items };
+        return;
+      }
       e.preventDefault();
       setMenu({ x: e.clientX, y: e.clientY, items });
     };
@@ -454,6 +465,38 @@ function NotesApp({
       window.removeEventListener("mouseup", onMouse);
     };
   }, [router]);
+
+  // The spelling suggestions for a right-click in the editor (see `onContext`).
+  const spellingMenu = useRef<{ x: number; y: number; items: MenuEntry[] } | null>(null);
+  useEffect(() => {
+    if (!NATIVE_SPELLING) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void (async () => {
+      const [{ listen }, { invoke }] = await Promise.all([import("@tauri-apps/api/event"), import("@tauri-apps/api/core")]);
+      const pick = (id: number | null) => void invoke("context_menu_pick", { id }).catch(() => {});
+      const unlisten = await listen<{ id: number; label: string }[]>("spelling-menu", ({ payload }) => {
+        const pending = spellingMenu.current;
+        spellingMenu.current = null;
+        if (!pending) return pick(null);
+        let chosen: number | null = null;
+        const suggestions: MenuEntry[] = payload.map((s) => ({ label: s.label, onClick: () => (chosen = s.id) }));
+        setMenu({
+          x: pending.x,
+          y: pending.y,
+          items: tidyMenu([...suggestions, { kind: "separator" }, ...pending.items]),
+          // A menu item runs after the menu closes: answer once it has.
+          onDismiss: () => setTimeout(() => pick(chosen), 0),
+        });
+      });
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    })();
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
 
   // Collection mentions in documents open the collection here.
   useEffect(() => {
@@ -802,7 +845,17 @@ function NotesApp({
       )}
       <DatePickerHost />
       <MediaHost onError={onError} />
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menu.items}
+          onClose={() => {
+            menu.onDismiss?.();
+            setMenu(null);
+          }}
+        />
+      )}
       <ErrorStack errors={errors.errors} onDismiss={errors.dismiss} />
       <Tooltips />
       {actions.overlay}

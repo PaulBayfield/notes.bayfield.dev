@@ -13,6 +13,7 @@
 
 mod realtime;
 mod shell;
+mod spelling;
 
 use shell::show_main_window;
 
@@ -803,6 +804,7 @@ pub fn run() {
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             shell::setup(app)?;
+            spelling::install(app.handle());
             let handle = app.handle().clone();
             restart_realtime(&handle);
             // Launched by an `outline://` link while not running.
@@ -824,6 +826,7 @@ pub fn run() {
             pick_files,
             upload_file,
             upload_bytes,
+            spelling::context_menu_pick,
             shell::set_close_to_tray,
             shell::set_start_minimized,
             shell::set_tray_labels,
