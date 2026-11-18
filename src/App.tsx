@@ -148,6 +148,8 @@ function NotesApp({
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Focus mode: the sidebar, the side panel and the tabs are hidden, only the page is left. */
+  const [focus, setFocus] = useState(false);
   const errors = useErrors();
   const [toast, setToast] = useState<{ message: string; undo?: () => void; label?: string } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -430,9 +432,25 @@ function NotesApp({
 
   // ---------- Keyboard ----------
 
-  const toggleSidebar = () => (mobile ? setDrawerOpen((o) => !o) : update({ sidebar: !settings.sidebar }));
-  const panelVisible = settings.panel;
-  const togglePanel = () => update({ panel: !settings.panel });
+  /** Focus mode keeps the table of contents on request (and remembers it until reload). */
+  const [focusToc, setFocusToc] = useState(false);
+  const focusTocVisible = focus && focusToc && route.name === "doc" && !!meta;
+  // Showing the sidebar leaves focus mode; the panel key toggles the table of contents there.
+  const toggleSidebar = () => {
+    if (focus) {
+      setFocus(false);
+      if (mobile ? drawerOpen : settings.sidebar) return;
+    }
+    if (mobile) setDrawerOpen((o) => !o);
+    else update({ sidebar: !settings.sidebar });
+  };
+  const panelVisible = settings.panel && !focus;
+  const toggleFocusToc = () => setFocusToc((v) => !v);
+  const togglePanel = () => (focus ? toggleFocusToc() : update({ panel: !settings.panel }));
+  const toggleFocus = () => {
+    setFocus((f) => !f);
+    setDrawerOpen(false);
+  };
 
   const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
   keyHandler.current = (e: KeyboardEvent) => {
@@ -445,6 +463,9 @@ function NotesApp({
     const k = e.key.toLowerCase();
     const typing = e.target instanceof HTMLElement && !!e.target.closest("input, textarea, select, [contenteditable='true']");
     if (ctrl && !e.altKey && (k === "k" || k === "p")) setSearchOpen(true);
+    else if (ctrl && !e.altKey && e.shiftKey && k === "f") toggleFocus();
+    // Escape leaves focus mode, unless it's closing something else (a menu, a dialog, find).
+    else if (focus && e.key === "Escape" && !actions.findOpen && !document.querySelector("[role='dialog'], [role='menu'], .menu")) setFocus(false);
     else if (ctrl && !e.altKey && !e.shiftKey && k === "f" && meta) actions.setFindOpen(true);
     else if (ctrl && e.altKey && k === "p" && meta) actions.present();
     else if (ctrl && e.shiftKey && k === "i" && meta) openPanel("insights");
@@ -751,9 +772,9 @@ function NotesApp({
   };
 
   return (
-    <div className="app">
+    <div className={`app${focus ? " focus-mode" : ""}`}>
       {mobile && drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
-      {(mobile ? drawerOpen : settings.sidebar) && (
+      {(mobile ? drawerOpen : settings.sidebar && !focus) && (
         <Sidebar
           workspace={workspace}
           meId={session.user.id}
@@ -836,8 +857,12 @@ function NotesApp({
             />
           }
           onSignOut={doSignOut}
+          focus={focus}
+          onToggleFocus={toggleFocus}
+          focusToc={route.name === "doc" && meta ? focusTocVisible : undefined}
+          onToggleFocusToc={toggleFocusToc}
         />
-        {tabs.length > 1 && (
+        {tabs.length > 1 && !focus && (
           <TabBar
             tabs={tabs}
             active={router.active}
@@ -848,7 +873,7 @@ function NotesApp({
             onContextMenu={tabMenu}
           />
         )}
-        {newRelease && (
+        {newRelease && !focus && (
           <div className="banner update-banner" role="status">
             <span>{installStatus(t, installer.state) ?? t("updateAvailable", { version: newRelease.version })}</span>
             <span className="banner-actions">
@@ -888,8 +913,9 @@ function NotesApp({
           ))}
         </div>
       </main>
-      {panelVisible && (
+      {(panelVisible || focusTocVisible) && (
         <Panel
+          contentsOnly={focus}
           meta={route.name === "doc" ? meta : null}
           headings={headings}
           presence={presence}

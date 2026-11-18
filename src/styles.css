@@ -506,6 +506,13 @@ textarea:disabled {
 .panel-header:has(> .window-controls) {
   padding-right: 0;
 }
+/* Focus mode: only the page and the way out are left; the button stays faint until hovered. */
+.toolbar.focus {
+  border-bottom-color: transparent;
+}
+.toolbar.focus .focus-toggle:not(:hover, :focus-visible) {
+  opacity: 0.45;
+}
 .toolbar-spacer {
   flex: 1;
   align-self: stretch;

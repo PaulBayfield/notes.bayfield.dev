@@ -18,6 +18,7 @@ export const SHORTCUTS: { keys: string[]; label: StringKey }[] = [
   { keys: [`${mod}+N`], label: "scNewDoc" },
   { keys: [`${mod}+B`, "\\"], label: "scSidebar" },
   { keys: ["."], label: "scPanel" },
+  { keys: [`${mod}+Shift+F`, "Esc"], label: "scFocus" },
   { keys: ["Alt+←", "Alt+→"], label: "scBackForward" },
   { keys: [`${mod}+,`], label: "scSettings" },
   { keys: ["/"], label: "scBlocks" },

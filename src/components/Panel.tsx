@@ -37,15 +37,18 @@ interface Props {
   onError: (e: unknown) => void;
   /** A revision was restored: reload the document. */
   onRestored: () => void;
+  /** Focus mode: just the table of contents, without the other tabs. */
+  contentsOnly?: boolean;
 }
 
 /** Right panel: contents, details and comments of the open document, or the shortcuts. */
 export function Panel(p: Props) {
   const { t } = useSettings();
   const { meta, headings } = p;
+  const tab: PanelTab = p.contentsOnly ? "contents" : p.tab;
   const minLevel = Math.min(...headings.map((h) => h.level), 4);
 
-  const current = useCurrentHeading(p.viewRef, headings, p.tab === "contents" && !!meta);
+  const current = useCurrentHeading(p.viewRef, headings, tab === "contents" && !!meta);
 
   const scrollTo = (pos: number) => {
     const view = p.viewRef.current;
@@ -57,34 +60,34 @@ export function Panel(p: Props) {
   return (
     <aside className="panel">
       <div className="panel-header" data-tauri-drag-region>
-        {meta ? (
+        {meta && !p.contentsOnly ? (
           <div className="panel-tabs" role="tablist">
-            {TABS.map(([tab, label, Icon]) => (
-              <button key={tab} role="tab" aria-selected={p.tab === tab} className={p.tab === tab ? "active" : ""} title={t(label)} aria-label={t(label)} onClick={() => p.onTab(tab)}>
+            {TABS.map(([id, label, Icon]) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} title={t(label)} aria-label={t(label)} onClick={() => p.onTab(id)}>
                 <Icon size={16} />
               </button>
             ))}
           </div>
         ) : (
           <span className="panel-label" data-tauri-drag-region>
-            {t("shortcuts")}
+            {t(meta ? "contents" : "shortcuts")}
           </span>
         )}
         <div className="toolbar-spacer" data-tauri-drag-region />
         {isTauri && <WindowControls />}
       </div>
       <div className="panel-body">
-        {meta && <div className="panel-tab-title">{t(TABS.find(([tab]) => tab === p.tab)![1])}</div>}
+        {meta && !p.contentsOnly && <div className="panel-tab-title">{t(TABS.find(([id]) => id === tab)![1])}</div>}
         {!meta ? (
           <ShortcutList />
-        ) : p.tab === "history" ? (
+        ) : tab === "history" ? (
           <History documentId={meta.doc.id} canUpdate={meta.canUpdate} onRestored={p.onRestored} onError={p.onError} />
-        ) : p.tab === "insights" ? (
+        ) : tab === "insights" ? (
           <>
             <Details meta={meta} presence={p.presence} />
             <Insights documentId={meta.doc.id} onError={p.onError} />
           </>
-        ) : p.tab === "comments" ? (
+        ) : tab === "comments" ? (
           <Comments
             documentId={meta.doc.id}
             user={p.user}

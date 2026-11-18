@@ -8,7 +8,7 @@ import { MenuList, type MenuEntry } from "./Menu";
 import { Avatar, HoverCard, PresenceCard } from "./Avatar";
 import { userDetails, type Collection } from "../lib/api";
 import { EntityIcon } from "./EntityIcon";
-import { ArrowLeft, ArrowRight, Columns, More, PanelLeft, PanelRight, Star, WinMaximize, WinMinimize, X } from "./icons";
+import { ArrowLeft, ArrowRight, Columns, ListTree, Maximize, Minimize, More, PanelLeft, PanelRight, Star, WinMaximize, WinMinimize, X } from "./icons";
 
 export interface Crumb {
   label: string;
@@ -45,10 +45,45 @@ interface Props {
   onSignOut: () => void;
   /** The notifications bell. */
   notifications?: ReactNode;
+  /** Focus mode: everything but the page is hidden. */
+  focus: boolean;
+  onToggleFocus: () => void;
+  /** Focus mode: whether the table of contents is shown; undefined when there's none (not a page). */
+  focusToc?: boolean;
+  onToggleFocusToc: () => void;
 }
 
 export function Toolbar(p: Props) {
   const { t } = useSettings();
+  const focusButton = (
+    <button
+      className={`icon-button focus-toggle${p.focus ? " active" : ""}`}
+      title={`${t(p.focus ? "exitFocusMode" : "focusMode")} (${mod}+Shift+F)`}
+      aria-pressed={p.focus}
+      onClick={p.onToggleFocus}
+    >
+      {p.focus ? <Minimize /> : <Maximize />}
+    </button>
+  );
+  // In focus mode the header keeps only the way out (and the window buttons in the desktop app).
+  if (p.focus)
+    return (
+      <header className="toolbar focus" data-tauri-drag-region>
+        <div className="toolbar-spacer" data-tauri-drag-region />
+        {focusButton}
+        {p.focusToc !== undefined && (
+          <button
+            className={`icon-button focus-toggle${p.focusToc ? " active" : ""}`}
+            title={`${t("contents")} (.)`}
+            aria-pressed={p.focusToc}
+            onClick={p.onToggleFocusToc}
+          >
+            <ListTree />
+          </button>
+        )}
+        {isTauri && !p.focusToc && <WindowControls />}
+      </header>
+    );
   return (
     <header className="toolbar" data-tauri-drag-region>
       {p.showSidebarToggle && (
@@ -83,6 +118,7 @@ export function Toolbar(p: Props) {
       <StatusDot status={p.status} />
       <div className="toolbar-spacer" data-tauri-drag-region />
       <Presence users={p.presence} collaborators={p.collaborators ?? []} me={p.user} documentId={p.documentId} />
+      {focusButton}
       {p.onToggleStar && (
         <button className={`icon-button${p.starred ? " active starred" : ""}`} title={t(p.starred ? "unstar" : "star")} onClick={p.onToggleStar}>
           <Star filled={p.starred} />

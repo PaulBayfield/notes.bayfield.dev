@@ -135,6 +135,16 @@ export const Check = (p: P) => (
     <path d="M20 6 9 17l-5-5" />
   </Icon>
 );
+export const Maximize = (p: P) => (
+  <Icon {...p}>
+    <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
+  </Icon>
+);
+export const Minimize = (p: P) => (
+  <Icon {...p}>
+    <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" />
+  </Icon>
+);
 export const Columns = (p: P) => (
   <Icon {...p}>
     <rect x="3" y="4" width="18" height="16" rx="2" />
