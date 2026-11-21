@@ -8,7 +8,8 @@ import { useSettings, type Settings, type Theme } from "../../lib/settings";
 import { Avatar } from "../Avatar";
 import type { BadgeStyle } from "../NotificationsButton";
 import { PageHeader, Row, Select, Switch, usePage } from "./common";
-import { connectPrefs, disconnectPrefs, usePrefsStatus } from "../../lib/prefs";
+import { connectPrefs, disconnectPrefs, usePrefsStatus, activeCustomTheme, BASE_COLORS, PREFS_URL } from "../../lib/prefs";
+import { External } from "../icons";
 
 export function ProfilePage() {
   const { t } = useSettings();
@@ -141,7 +142,7 @@ export function PreferencesPage() {
         <h3>{t("appearance")}</h3>
         <div className="theme-picker">
           {THEMES.map(({ id, label }) => (
-            <button key={id} className={`theme-card${settings.theme === id ? " active" : ""}`} onClick={() => update({ theme: id })}>
+            <button key={id} className={`theme-card${!activeCustomTheme(settings) && settings.theme === id ? " active" : ""}`} onClick={() => update({ theme: id, customTheme: "" })}>
               <span className={`theme-preview ${id}`}>
                 <span />
                 <span />
@@ -150,7 +151,32 @@ export function PreferencesPage() {
               {t(label)}
             </button>
           ))}
+          {settings.customThemes.map((theme) => {
+            const c = { ...BASE_COLORS[theme.base], ...theme.colors };
+            return (
+              <button
+                key={theme.id}
+                className={`theme-card${activeCustomTheme(settings)?.id === theme.id ? " active" : ""}`}
+                title={theme.name}
+                onClick={() => update({ theme: theme.base, customTheme: theme.id })}
+              >
+                <span className="theme-preview" style={{ background: c.bg, borderColor: c["border-strong"] }}>
+                  <span style={{ background: c["bg-sidebar"] }} />
+                  <span style={{ background: c.primary }} />
+                  <span style={{ background: c.accent }} />
+                </span>
+                <span className="theme-card-name">{theme.name}</span>
+              </button>
+            );
+          })}
         </div>
+        <p className="theme-manage">
+          {t("manageThemesHint")}{" "}
+          <button className="theme-manage-link" onClick={() => void openExternal(PREFS_URL)}>
+            {t("manageThemes")}
+            <External size={13} />
+          </button>
+        </p>
       </section>
       <section className="settings-rows">
         <Row label={t("language")}>

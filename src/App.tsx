@@ -144,7 +144,7 @@ function NotesApp({
 }) {
   const { t, settings, update } = useSettings();
   // Theme and language are shared with the other bayfield.dev apps (prefs.bayfield.dev).
-  usePrefsSync({ theme: settings.theme, language: settings.language }, update);
+  usePrefsSync({ theme: settings.theme, customThemes: settings.customThemes, customTheme: settings.customTheme, language: settings.language }, update);
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
   const [drawerOpen, setDrawerOpen] = useState(false);
