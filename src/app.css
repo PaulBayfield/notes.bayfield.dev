@@ -2498,3 +2498,69 @@ textarea.text-field {
     transform: translateX(12px);
   }
 }
+
+/* PDF export: the content to print, drawn off screen until the print dialog shows it alone. */
+.print-root {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 170mm;
+  visibility: hidden;
+  pointer-events: none;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.print-title {
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 0.8em;
+}
+@media print {
+  @page {
+    margin: 18mm 20mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body > :not(.print-root) {
+    display: none !important;
+  }
+  .print-root {
+    position: static;
+    width: auto;
+    visibility: visible;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  /* Controls that only make sense on screen. */
+  .print-root .code-header,
+  .print-root .media-actions,
+  .print-root .column-resize-handle,
+  .print-root select,
+  .print-root button {
+    display: none !important;
+  }
+  .print-root h1,
+  .print-root h2,
+  .print-root h3,
+  .print-root h4 {
+    break-after: avoid;
+  }
+  .print-root img,
+  .print-root .mermaid-diagram,
+  .print-root .math-block,
+  .print-root pre,
+  .print-root blockquote,
+  .print-root tr {
+    break-inside: avoid;
+  }
+  .print-root img {
+    max-width: 100% !important;
+  }
+}

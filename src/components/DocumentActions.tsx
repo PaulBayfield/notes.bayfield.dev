@@ -1,6 +1,7 @@
 // Everything in the document "…" menu, the sidebar's right-click menus, and the dialogs they open.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import type { Selection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import {
   archiveCollection,
@@ -39,6 +40,7 @@ import type { Workspace } from "../lib/workspace";
 import type { HeadingPrefixStyle } from "../editor/headingPrefix";
 import { CollectionDialog } from "./CollectionDialog";
 import { ExportDialog } from "./ExportDialog";
+import { PdfExportDialog } from "./PdfExport";
 import { ConfirmDialog, Dialog as Modal, MoveDialog } from "./Dialogs";
 import { SharePanel } from "./ShareButton";
 import type { DocMeta } from "./DocumentView";
@@ -97,6 +99,8 @@ type Dialog =
   | { kind: "deleteCollection"; collection: Collection }
   | { kind: "exportCollection"; collection: Collection }
   | { kind: "present" }
+  /** `selection`: the editor's, when the menu was opened (to export only that). */
+  | { kind: "pdf"; selection: Selection }
   | { kind: "permissions" }
   | null;
 
@@ -310,6 +314,10 @@ export function useDocumentActions(p: Params) {
             }),
           },
           !!view && {
+            label: t("exportPdf"),
+            onClick: () => setDialog({ kind: "pdf", selection: view.state.selection }),
+          },
+          !!view && {
             label: t("exportJson"),
             onClick: run(async () => {
               // The document as Outline stores it (ProseMirror JSON), with its details: nothing is lost.
@@ -488,6 +496,17 @@ export function useDocumentActions(p: Params) {
     overlay = <ExportDialog collection={dialog.collection} onClose={close} flash={flash} onError={onError} />;
   else if (dialog?.kind === "present" && meta && p.viewRef.current)
     overlay = <Presentation title={meta.doc.title} icon={meta.doc.icon} color={meta.doc.color} doc={p.viewRef.current.state.doc} onClose={close} />;
+  else if (dialog?.kind === "pdf" && meta && p.viewRef.current)
+    overlay = (
+      <PdfExportDialog
+        title={meta.doc.title}
+        doc={p.viewRef.current.state.doc}
+        selection={dialog.selection}
+        headingPrefix={(meta.doc.preferences?.headingPrefix ?? "none") as HeadingPrefixStyle}
+        onClose={close}
+        onError={onError}
+      />
+    );
   else if (dialog?.kind === "permissions" && meta)
     overlay = (
       <Modal title={t("shareDocument", { title: meta.doc.title || t("untitled") })} onClose={close}>

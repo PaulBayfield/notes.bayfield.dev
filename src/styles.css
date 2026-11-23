@@ -1,7 +1,9 @@
 /* ---------- Themes ---------- */
 
 :root,
-:root[data-theme="light"] {
+:root[data-theme="light"],
+/* A PDF is always printed light, whatever the theme. */
+.print-root {
   --bg: #ffffff;
   --bg-sidebar: #f8f8f7;
   --bg-weekend: #fafaf9;
