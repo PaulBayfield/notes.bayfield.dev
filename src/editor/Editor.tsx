@@ -14,6 +14,8 @@ import { acquire, presence, unknownTypes, type CollabStatus, type PresenceUser }
 import { BubbleMenu, LINK_EVENT, PasteMenu, SuggestMenu } from "./menus";
 import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
+import { TableGrips } from "./tableGrips";
+import { NotesTableView } from "./tables";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
 import { schema } from "./schema";
@@ -214,7 +216,7 @@ export function Editor(props: Props) {
           ...editorKeymaps(),
           mathPlugin,
           // Drag a column's right edge to resize it; widths are kept in the cells (`colwidth`), as in Outline.
-          columnResizing({ cellMinWidth: 60 }),
+          columnResizing({ cellMinWidth: 60, View: NotesTableView }),
           tableEditing(),
           highlightPlugin(),
           findPlugin(),
@@ -376,6 +378,7 @@ export function Editor(props: Props) {
           />
           <PasteMenu view={view} state={state} t={props.t} />
           <BlockHandle view={view} state={state} t={props.t} docUrl={props.docUrl} />
+          <TableGrips view={view} state={state} t={props.t} />
           <BubbleMenu
             view={view}
             state={state}

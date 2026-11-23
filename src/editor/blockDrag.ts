@@ -198,6 +198,16 @@ export function startBlockDrag(view: EditorView, block: Block, down: PointerEven
     window.addEventListener("pointerup", onUp);
     return;
   }
+  // A block in a table cell (a list item) moves within that cell: the table around it, or the
+  // cells next to it, aren't places to drop it.
+  let cell: { from: number; to: number } | null = null;
+  for (let d = $pos.depth; d > 0; d--) {
+    const role = $pos.node(d).type.spec.tableRole;
+    if (role === "cell" || role === "header_cell") {
+      cell = { from: $pos.start(d), to: $pos.end(d) };
+      break;
+    }
+  }
   const source = siblings[index];
   const sourceLeft = source.dom.getBoundingClientRect().left;
   const scroller = scrollParent(view.dom);
@@ -251,6 +261,7 @@ export function startBlockDrag(view: EditorView, block: Block, down: PointerEven
     for (const unit of units) {
       // The dragged block or something inside it.
       if (unit.pos >= block.pos && unit.pos < block.pos + block.node.nodeSize) return null;
+      if (cell && (unit.pos < cell.from || unit.pos >= cell.to)) continue;
       const dom = view.nodeDOM(unit.pos);
       if (!(dom instanceof HTMLElement)) continue;
       const rect = dom.getBoundingClientRect();

@@ -1071,3 +1071,108 @@ body.block-dragging * {
     width 100ms ease-out,
     opacity 100ms;
 }
+
+/* ---------- Tables: layout, grips, toolbar ---------- */
+
+/* Outline's full-width table: as wide as the page, centred on the text. */
+.doc-content .table-full-width {
+  --table-full: max(100%, 100cqw - 96px);
+  width: var(--table-full);
+  margin-left: calc((100% - var(--table-full)) / 2);
+}
+/* Lists in cells: a little less indented, the cell has its own padding. */
+.doc-content :is(td, th) :is(ul, ol) {
+  padding-left: 1.3em;
+}
+
+.table-grips > * {
+  position: fixed;
+  /* Over the page, under menus and dialogs, like the block handle. */
+  z-index: 38;
+}
+.table-grip-line {
+  display: flex;
+}
+.table-grip-line.row {
+  flex-direction: column;
+}
+.table-grip {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 3px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 80ms ease-out;
+}
+.table-grip-line.column .table-grip {
+  margin: 0 1px;
+}
+.table-grip-line.row .table-grip {
+  margin: 1px 0;
+}
+.table-grip:hover {
+  background: var(--text-faint);
+}
+.table-grip.selected {
+  background: var(--primary);
+}
+.table-grip-add {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 80ms ease-out;
+}
+/* Just outside the bar, where the next column's or row's bar can't cover it. */
+.table-grip-line.column .table-grip-add {
+  right: -8px;
+  bottom: calc(100% + 2px);
+}
+.table-grip-line.row .table-grip-add {
+  bottom: -8px;
+  right: calc(100% + 2px);
+}
+.table-grip-line:hover .table-grip-add {
+  opacity: 1;
+}
+.table-grip-add:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.table-drop-line {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--primary) 75%, transparent);
+  pointer-events: none;
+}
+/* A list item's grip inside a table cell: narrow, in the cell's padding. */
+.block-handle.in-cell button {
+  width: 12px;
+  height: 20px;
+  border-radius: 3px;
+}
+.block-handle.in-cell svg {
+  width: 8px;
+}
+.bubble-menu button:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.bubble-menu button svg {
+  display: block;
+}
+/* With cells selected, only their tint shows, not the browser's own selection (from prosemirror-view's CSS). */
+.ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+.ProseMirror-hideselection {
+  caret-color: transparent;
+}

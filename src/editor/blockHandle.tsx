@@ -24,8 +24,30 @@ import { schema } from "./schema";
 
 const { nodes } = schema;
 
+interface Anchor {
+  left: number;
+  top: number;
+  /** Where the block itself starts: between there and the handle, the handle stays. */
+  blockLeft: number;
+  /** In a table cell: only a narrow grip, inside the cell, so it doesn't cover the cell before. */
+  inCell: boolean;
+}
+
+/** The table cell (td or th) the block is in, if any. */
+function cellOf(view: EditorView, block: Block): HTMLElement | null {
+  const $pos = view.state.doc.resolve(block.pos);
+  for (let d = $pos.depth; d > 0; d--) {
+    const role = $pos.node(d).type.spec.tableRole;
+    if (role === "cell" || role === "header_cell") {
+      const dom = view.nodeDOM($pos.before(d));
+      return dom instanceof HTMLElement ? dom : null;
+    }
+  }
+  return null;
+}
+
 /** Screen position for the handle: left of the block, level with its first line. */
-function anchorFor(view: EditorView, block: Block): { left: number; top: number } | null {
+function anchorFor(view: EditorView, block: Block): Anchor | null {
   const dom = view.nodeDOM(block.pos);
   if (!(dom instanceof HTMLElement)) return null;
   const rect = dom.getBoundingClientRect();
@@ -45,10 +67,13 @@ function anchorFor(view: EditorView, block: Block): { left: number; top: number 
     const middle = lineTop + lineHeight / 2;
     if (middle < box.top + 4 || middle > box.bottom - 4) return null;
   }
+  const cell = cellOf(view, block);
+  if (cell) return { left: cell.getBoundingClientRect().left + 1, top: lineTop + lineHeight / 2 - 10, blockLeft: rect.left, inCell: true };
   // A bullet or number is drawn outside its item, left of `rect`: the handle leaves room for it. A
-  // to-do's checkbox is inside the item, so it sits closer, at the same distance from the box.
-  const offset = block.node.type === nodes.list_item ? 70 : block.node.type === nodes.checkbox_item ? 56 : 50;
-  return { left: rect.left - offset, top: lineTop + lineHeight / 2 - 12 };
+  // to-do's checkbox is inside the item, so it sits closer, at the same distance from the box. A
+  // table's row grips are just left of it, so its handle stays clear of them.
+  const offset = block.node.type === nodes.list_item ? 70 : block.node.type === nodes.checkbox_item ? 56 : block.node.type === nodes.table ? 68 : 50;
+  return { left: rect.left - offset, top: lineTop + lineHeight / 2 - 12, blockLeft: rect.left, inCell: false };
 }
 
 interface MenuItem {
@@ -106,6 +131,8 @@ export function BlockHandle({ view, state, t, docUrl }: Props) {
   const draggingRef = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  /** The strip from the handle to its block, where moving the pointer keeps the handle. */
+  const corridorRef = useRef<{ left: number; right: number; top: number; bottom: number } | null>(null);
   const editable = view.editable;
 
   // Follow the pointer over the editor and the gutter to its left.
@@ -117,6 +144,10 @@ export function BlockHandle({ view, state, t, docUrl }: Props) {
       frame = requestAnimationFrame(() => {
         if (view.isDestroyed || draggingRef.current) return;
         if (e.target instanceof Node && handleRef.current?.contains(e.target)) return;
+        // On the way from the block to its handle, the pointer can cross other blocks (a nested
+        // item's parent, the cell before): the handle stays put meanwhile.
+        const c = corridorRef.current;
+        if (c && e.clientX >= c.left && e.clientX <= c.right && e.clientY >= c.top && e.clientY <= c.bottom) return;
         // A dialog, the mobile sidebar or a sign-in is open over the page: nothing underneath can be dragged.
         if (e.target instanceof Element && e.target.closest(".dialog-backdrop, .drawer-backdrop, .signin-overlay")) return setHover(null);
         const box = view.dom.getBoundingClientRect();
@@ -148,6 +179,7 @@ export function BlockHandle({ view, state, t, docUrl }: Props) {
   // A block that changed under the handle is looked up again on the next move.
   const hovered = hover && hover.pos + hover.node.nodeSize <= state.doc.content.size && state.doc.nodeAt(hover.pos) === hover.node ? hover : null;
   const anchor = hovered && !menu ? anchorFor(view, hovered) : null;
+  corridorRef.current = anchor ? { left: anchor.left, right: anchor.blockLeft, top: anchor.top - 2, bottom: anchor.top + 26 } : null;
 
   const openMenu = (block: Block) => {
     const at = anchorFor(view, block);
@@ -270,10 +302,12 @@ export function BlockHandle({ view, state, t, docUrl }: Props) {
   return (
     <>
       {anchor && hovered && (
-        <div ref={handleRef} className="block-handle" style={{ left: anchor.left, top: anchor.top }} onMouseDown={(e) => e.preventDefault()}>
-          <button title={t("addBlockBelow")} onClick={() => addBelow(hovered)}>
-            +
-          </button>
+        <div ref={handleRef} className={`block-handle${anchor.inCell ? " in-cell" : ""}`} style={{ left: anchor.left, top: anchor.top }} onMouseDown={(e) => e.preventDefault()}>
+          {!anchor.inCell && (
+            <button title={t("addBlockBelow")} onClick={() => addBelow(hovered)}>
+              +
+            </button>
+          )}
           <button className="grip" title={t("dragOrClick")} onPointerDown={onGripDown}>
             <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
               {[2, 7, 12].flatMap((y) => [2, 8].map((x) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.4" />))}

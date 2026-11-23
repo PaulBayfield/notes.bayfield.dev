@@ -372,6 +372,8 @@ body.resizing {
 /* ---------- Pages ---------- */
 
 .doc-scroll {
+  /* Full-width tables size themselves on it (cqw). */
+  container-type: inline-size;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

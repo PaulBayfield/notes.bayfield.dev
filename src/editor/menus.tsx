@@ -3,7 +3,8 @@ import { flushSync } from "react-dom";
 import { TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { setBlockType, toggleMark } from "prosemirror-commands";
-import { addColumnAfter, addRowAfter, CellSelection, deleteColumn, deleteRow, deleteTable, isInTable } from "prosemirror-tables";
+import { CellSelection, isInTable } from "prosemirror-tables";
+import { tableActions } from "./tableMenu";
 import { listCollections, listGroups, listUsers, recentlyViewed, searchTitles, type Collection, type Group, type User } from "../lib/api";
 import { EmojiGrid } from "../components/EmojiPicker";
 import { EntityIcon } from "../components/EntityIcon";
@@ -458,11 +459,22 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
 
   useLayoutEffect(() => {
     if (!show) return setPos(null);
-    const start = view.coordsAtPos(selection.from);
-    const end = view.coordsAtPos(selection.to);
+    let start: { top: number; left: number } = view.coordsAtPos(selection.from);
+    let end: { bottom: number; right: number } = view.coordsAtPos(selection.to);
+    // Selected cells: their `from` isn't the top-left one, so measure them all.
+    if (selection instanceof CellSelection) {
+      const boxes = selection.ranges.map((r) => {
+        const cell = view.nodeDOM(r.$from.pos - 1);
+        return cell instanceof HTMLElement ? cell.getBoundingClientRect() : view.coordsAtPos(r.$from.pos);
+      });
+      start = { top: Math.min(...boxes.map((b) => b.top)), left: Math.min(...boxes.map((b) => b.left)) };
+      end = { bottom: Math.max(...boxes.map((b) => b.bottom)), right: Math.max(...boxes.map((b) => b.right)) };
+    }
     const width = ref.current?.offsetWidth ?? 300;
     const center = (start.left + end.right) / 2;
-    const top = start.top - 44 < 8 ? end.bottom + 8 : start.top - 44;
+    // Selected cells: above the table's grips too.
+    const above = selection instanceof CellSelection ? 60 : 44;
+    const top = start.top - above < 8 ? end.bottom + 8 : start.top - above;
     setPos({ left: Math.max(8, Math.min(center - width / 2, window.innerWidth - width - 8)), top });
   }, [show, selection.from, selection.to, view, editingLink, state]);
 
@@ -477,6 +489,7 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
     setPalette(false);
     view.focus();
   };
+  const tableButtons = inTable ? tableActions(state, run, t) : null;
   const markButton = (label: string, title: string, type: (typeof marks)[keyof typeof marks]) => (
     <button className={isMarkActive(state, type) ? "active" : ""} title={title} onClick={run(toggleMark(type))}>
       {label}
@@ -561,27 +574,16 @@ export function BubbleMenu({ view, state, t, openLink, onComment }: BubbleProps)
               💬
             </button>
           )}
-          <span className="menu-sep" />
           {inTable ? (
-            <>
-              <button title={t("addRow")} onClick={run(addRowAfter)}>
-                +▭
-              </button>
-              <button title={t("addColumn")} onClick={run(addColumnAfter)}>
-                +▯
-              </button>
-              <button title={t("deleteRow")} onClick={run(deleteRow)}>
-                −▭
-              </button>
-              <button title={t("deleteColumn")} onClick={run(deleteColumn)}>
-                −▯
-              </button>
-              <button title={t("deleteTable")} onClick={run(deleteTable)}>
-                ✕⊞
-              </button>
-            </>
+            tableButtons && (
+              <>
+                <span className="menu-sep" />
+                {tableButtons}
+              </>
+            )
           ) : (
             <>
+              <span className="menu-sep" />
               <button className={isBlockActive(state, nodes.heading, { level: 1 }) ? "active" : ""} title={t("blockH1")} onClick={run(toggleHeading(1))}>
                 H1
               </button>

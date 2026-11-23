@@ -72,6 +72,8 @@ day, even on a modest laptop.
 - **Editor:** `/` block menu, `@` mentions, `:` emoji, Markdown shortcuts (`#`, `-`, `- [ ]`, `>`, ```` ``` ````,
   `**bold**`…), Markdown paste, a formatting toolbar on selection, to-do lists, tables, notices, toggles, code
   blocks with syntax colours, math (KaTeX), Mermaid diagrams, images and file uploads (paste or drop)
+- **Tables:** grips on rows and columns to select, drag to reorder or insert; align, sort, merge and split cells,
+  header row and column, full width, evenly spread or resized columns; lists inside cells (Tab indents them)
 - **Collections:** create and edit (name, Outline icon or any emoji, colour, access), drag to reorder; each
   collection's overview is an editable page (Markdown descriptions are converted), with pinned documents
 - **Document menu like Outline's:** star, subscribe, templatize, duplicate, unpublish, archive, move, import, new
@@ -289,7 +291,9 @@ release. Once you publish it, the desktop app offers it to everyone (it checks t
 | `Ctrl+Alt+1…4` | Headings |
 | `Ctrl+Shift+7/8/9` | Numbered / bulleted / to-do list |
 | `Ctrl+Alt+M` | Comment on the selection |
-| `Ctrl+Enter` | Check a to-do, or leave a code block / notice / quote |
+| `Ctrl+Enter` | Check a to-do, add a table row, or leave a code block / notice / quote |
+| `Tab` / `Shift+Tab` | In a table: next / previous cell (in a list in a cell, indent / outdent the item first) |
+| `Ctrl+Alt+↑` `↓` | Move the block, or the selected table rows (`←` `→`: the selected columns) |
 | `Ctrl+Click` | Open a link |
 
 

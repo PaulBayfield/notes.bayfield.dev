@@ -8,7 +8,7 @@ import { Node } from "prosemirror-model";
 import { history } from "prosemirror-history";
 import { dropCursor } from "prosemirror-dropcursor";
 import { gapCursor } from "prosemirror-gapcursor";
-import { tableEditing } from "prosemirror-tables";
+import { columnResizing, tableEditing } from "prosemirror-tables";
 import { mathPlugin } from "@benrbray/prosemirror-math";
 import type { RichText, User } from "../lib/api";
 import { docIdFromHref, webUrl } from "../lib/api";
@@ -21,6 +21,8 @@ import { looksLikeMarkdown, markdownToSlice } from "./markdown";
 import { BubbleMenu, PasteMenu, SuggestMenu } from "./menus";
 import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
+import { TableGrips } from "./tableGrips";
+import { NotesTableView } from "./tables";
 import { nodeViews } from "./nodeviews";
 import { editorKeymaps } from "./rules";
 import { registerEditor } from "./registry";
@@ -77,6 +79,7 @@ export function StaticEditor(props: Props) {
           history(),
           ...editorKeymaps(false),
           mathPlugin,
+          columnResizing({ cellMinWidth: 60, View: NotesTableView }),
           tableEditing(),
           highlightPlugin(),
           mermaidEditingPlugin(),
@@ -147,6 +150,7 @@ export function StaticEditor(props: Props) {
           <SuggestMenu view={view} state={state} t={props.t} self={props.user} pickFile={() => {}} uploads={false} />
           <PasteMenu view={view} state={state} t={props.t} />
           <BlockHandle view={view} state={state} t={props.t} />
+          <TableGrips view={view} state={state} t={props.t} />
           <BubbleMenu view={view} state={state} t={props.t} openLink={(href) => (docIdFromHref(href) ? props.onOpenDocument(docIdFromHref(href)!) : void openExternal(href))} />
         </>
       )}

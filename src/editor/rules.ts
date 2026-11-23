@@ -37,6 +37,7 @@ import {
 import { schema } from "./schema";
 import { toggleAllToggles } from "./nodeviews";
 import { languageId } from "./codeLanguages";
+import { deleteSelectedTable, moveSelectedLines } from "./tables";
 import { isMac } from "../lib/platform";
 
 const { nodes, marks } = schema;
@@ -290,6 +291,28 @@ function rules(): Plugin {
   });
 }
 
+/**
+ * Tab / Shift+Tab in a list inside a table cell: indents or outdents the item when it can, as
+ * anywhere else. Tab on an item that can't go further in (the first one), or Shift+Tab on a
+ * top-level item, moves to the next or previous cell instead.
+ */
+function indentInCellList(dir: -1 | 1, sink: Command, lift: Command): Command {
+  return (state, dispatch) => {
+    const { $from } = state.selection;
+    let lists = 0;
+    for (let d = $from.depth; d > 0; d--) {
+      const node = $from.node(d);
+      const role = node.type.spec.tableRole;
+      if (role === "cell" || role === "header_cell") {
+        if (!lists) return false;
+        return dir > 0 ? sink(state, dispatch) : lists > 1 && lift(state, dispatch);
+      }
+      if (node.type.spec.group?.split(" ").includes("list")) lists++;
+    }
+    return false;
+  };
+}
+
 const hardBreak: Command = chainCommands(exitCode, (state, dispatch) => {
   if (dispatch) dispatch(state.tr.replaceSelectionWith(nodes.br.create()).scrollIntoView());
   return true;
@@ -305,7 +328,8 @@ function keys(collab: boolean): Plugin {
     "Mod-z": undo,
     "Mod-y": redo,
     "Shift-Mod-z": redo,
-    Backspace: chainCommands(undoInputRule, mathBackspaceCmd, backspaceToParagraph),
+    Backspace: chainCommands(undoInputRule, mathBackspaceCmd, deleteSelectedTable, backspaceToParagraph),
+    Delete: deleteSelectedTable,
     // With nothing selected, Ctrl+B is left to the app (it toggles the sidebar, as in Calendar).
     "Mod-b": (state, dispatch) => !state.selection.empty && toggleMark(marks.strong)(state, dispatch),
     "Mod-i": toggleMark(marks.em),
@@ -325,8 +349,8 @@ function keys(collab: boolean): Plugin {
     "Shift-Enter": chainCommands(newlineInCode, hardBreak),
     "Mod-Enter": chainCommands(toggleCheckbox, addRowAndMove, exitBlock),
     Enter: chainCommands(editSelectedBlock, enterInCode, splitItem),
-    Tab: chainCommands(indentInCode, goToNextCell(1), addRowAndMove, sink),
-    "Shift-Tab": chainCommands(outdentInCode, goToNextCell(-1), lift),
+    Tab: chainCommands(indentInCode, indentInCellList(1, sink, lift), goToNextCell(1), addRowAndMove, sink),
+    "Shift-Tab": chainCommands(outdentInCode, indentInCellList(-1, sink, lift), goToNextCell(-1), lift),
     "Mod-a": selectAllInCode,
     ...(isMac ? { "Ctrl-a": lineEdgeInCode(-1), "Ctrl-e": lineEdgeInCode(1) } : {}),
     ArrowUp: chainCommands(arrowFromBlock(-1), moveOutOfTable(-1)),
@@ -357,10 +381,15 @@ function keys(collab: boolean): Plugin {
     "Alt-ArrowUp": joinUp,
     "Alt-ArrowDown": joinDown,
     // Moving blocks: Outline's keys, then Notion's.
-    "Mod-Alt-ArrowUp": moveBlock(-1),
-    "Mod-Alt-ArrowDown": moveBlock(1),
-    "Mod-Shift-ArrowUp": moveBlock(-1),
-    "Mod-Shift-ArrowDown": moveBlock(1),
+    // With table rows or columns selected, those move instead.
+    "Mod-Alt-ArrowUp": chainCommands(moveSelectedLines("row", -1), moveBlock(-1)),
+    "Mod-Alt-ArrowDown": chainCommands(moveSelectedLines("row", 1), moveBlock(1)),
+    "Mod-Shift-ArrowUp": chainCommands(moveSelectedLines("row", -1), moveBlock(-1)),
+    "Mod-Shift-ArrowDown": chainCommands(moveSelectedLines("row", 1), moveBlock(1)),
+    "Mod-Alt-ArrowLeft": moveSelectedLines("column", -1),
+    "Mod-Alt-ArrowRight": moveSelectedLines("column", 1),
+    "Mod-Shift-ArrowLeft": moveSelectedLines("column", -1),
+    "Mod-Shift-ArrowRight": moveSelectedLines("column", 1),
     "Mod-Alt-t": toggleAllToggles,
     "Mod-/": (state) => {
       if (!currentBlock(state)) return false;

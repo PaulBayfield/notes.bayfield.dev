@@ -409,7 +409,7 @@ const nodes: Record<string, NodeSpec> = {
     group: "block",
     attrs: { layout: { default: null } },
     parseDOM: [{ tag: "table" }],
-    toDOM: () => ["div", { class: "table-wrapper" }, ["table", {}, ["tbody", 0]]],
+    toDOM: (node) => ["div", { class: node.attrs.layout === "full-width" ? "table-wrapper table-full-width" : "table-wrapper" }, ["table", {}, ["tbody", 0]]],
   },
 };
 
