@@ -597,6 +597,19 @@ body.resizing {
     opacity: 0;
   }
 }
+
+/* The header folds as it narrows (see Toolbar): fewer crumbs, then no back/forward or labels. */
+.toolbar.compact .crumb-link {
+  max-width: 120px;
+}
+.toolbar.narrow {
+  padding: 0 8px;
+  gap: 4px;
+}
+.toolbar.narrow .nav-buttons,
+.toolbar.narrow .status-label {
+  display: none;
+}
 @media (max-width: 760px) {
   body {
     height: 100dvh;

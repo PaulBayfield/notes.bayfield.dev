@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { User } from "../lib/api";
 import type { PresenceUser } from "../editor/collab";
 import type { EditorStatus } from "../editor/Editor";
@@ -31,7 +31,8 @@ interface Props {
   documentId?: string;
   starred?: boolean;
   onToggleStar?: () => void;
-  docMenu?: ReactNode;
+  /** The page's "…" menu; buttons that don't fit the header move into it. */
+  docMenu?: MenuEntry[];
   /** Shown for drafts. */
   publish?: ReactNode;
   share?: ReactNode;
@@ -53,8 +54,18 @@ interface Props {
   onToggleFocusToc: () => void;
 }
 
+/** Below this header width the less used buttons (focus, star, split) move into the "…" menu. */
+const COMPACT = 720;
+/** Below this one only the page's own name, the menu and the essentials are left. */
+const NARROW = 500;
+
 export function Toolbar(p: Props) {
   const { t } = useSettings();
+  // The header's own width, not the window's: the sidebar and the docked panel take their share.
+  const ref = useRef<HTMLElement>(null);
+  const width = useWidth(ref);
+  const compact = width > 0 && width < COMPACT;
+  const narrow = width > 0 && width < NARROW;
   const focusButton = (
     <button
       className={`icon-button focus-toggle${p.focus ? " active" : ""}`}
@@ -68,7 +79,7 @@ export function Toolbar(p: Props) {
   // In focus mode the header keeps only the way out (and the window buttons in the desktop app).
   if (p.focus)
     return (
-      <header className="toolbar focus" data-tauri-drag-region>
+      <header ref={ref} className="toolbar focus" data-tauri-drag-region>
         <div className="toolbar-spacer" data-tauri-drag-region />
         {focusButton}
         {p.focusToc !== undefined && (
@@ -84,8 +95,17 @@ export function Toolbar(p: Props) {
         {isTauri && !p.focusToc && <WindowControls />}
       </header>
     );
+  const crumbs = narrow ? p.crumbs.slice(-1) : compact ? p.crumbs.slice(-2) : p.crumbs;
+  const overflow: MenuEntry[] = compact
+    ? [
+        ...(p.onToggleStar ? [{ label: t(p.starred ? "unstar" : "star"), icon: <Star size={15} filled={p.starred} />, onClick: p.onToggleStar }] : []),
+        { label: t("focusMode"), icon: <Maximize size={15} />, kbd: `${mod}+Shift+F`, onClick: p.onToggleFocus },
+        { label: t("splitView"), icon: <Columns size={15} />, checked: p.split, onClick: p.onToggleSplit },
+      ]
+    : [];
+  const menu = [...overflow, ...(overflow.length && p.docMenu?.length ? [{ kind: "separator" } as const] : []), ...(p.docMenu ?? [])];
   return (
-    <header className="toolbar" data-tauri-drag-region>
+    <header ref={ref} className={`toolbar${compact ? " compact" : ""}${narrow ? " narrow" : ""}`} data-tauri-drag-region>
       {p.showSidebarToggle && (
         <button className="icon-button" title={`${t("toggleSidebar")} (${mod}+B)`} onClick={p.onToggleSidebar}>
           <PanelLeft />
@@ -100,7 +120,7 @@ export function Toolbar(p: Props) {
         </button>
       </div>
       <nav className="crumbs" data-tauri-drag-region>
-        {p.crumbs.map((c, i) => (
+        {crumbs.map((c, i) => (
           <span key={i} className="crumb" data-tauri-drag-region={c.onClick ? undefined : true}>
             {i > 0 && <span className="crumb-sep">/</span>}
             {c.onClick ? (
@@ -117,20 +137,22 @@ export function Toolbar(p: Props) {
       </nav>
       <StatusDot status={p.status} />
       <div className="toolbar-spacer" data-tauri-drag-region />
-      <Presence users={p.presence} collaborators={p.collaborators ?? []} me={p.user} documentId={p.documentId} />
-      {focusButton}
-      {p.onToggleStar && (
+      {!narrow && <Presence users={p.presence} collaborators={p.collaborators ?? []} me={p.user} documentId={p.documentId} max={compact ? 3 : MAX_FACES} />}
+      {!compact && focusButton}
+      {!compact && p.onToggleStar && (
         <button className={`icon-button${p.starred ? " active starred" : ""}`} title={t(p.starred ? "unstar" : "star")} onClick={p.onToggleStar}>
           <Star filled={p.starred} />
         </button>
       )}
       {p.share}
       {p.publish}
-      {p.docMenu}
+      {menu.length > 0 && <DropdownMenu title={t("more")} items={menu} />}
       {p.notifications}
-      <button className={`icon-button${p.split ? " active" : ""}`} title={t(p.split ? "closeSplitView" : "splitView")} aria-pressed={p.split} onClick={p.onToggleSplit}>
-        <Columns />
-      </button>
+      {!compact && (
+        <button className={`icon-button${p.split ? " active" : ""}`} title={t(p.split ? "closeSplitView" : "splitView")} aria-pressed={p.split} onClick={p.onToggleSplit}>
+          <Columns />
+        </button>
+      )}
       {/* The profile last, right before the side panel toggle (as in every bayfield.dev app). */}
       <AccountMenu user={p.user} onOpenSettings={p.onOpenSettings} onSignOut={p.onSignOut} />
       <button
@@ -198,7 +220,7 @@ const MAX_FACES = 6;
  * Who is here now, then who has edited the page before (as Outline's header does). You're left
  * out: your account picture sits right next to them.
  */
-function Presence({ users, collaborators, me, documentId }: { users: PresenceUser[]; collaborators: User[]; me: User; documentId?: string }) {
+function Presence({ users, collaborators, me, documentId, max }: { users: PresenceUser[]; collaborators: User[]; me: User; documentId?: string; max: number }) {
   const faces: Face[] = users.filter((u) => u.id !== me.id).map((u) => ({ id: u.id, name: u.name, color: u.color, status: u.editing ? "editing" : "viewing" }));
   for (const c of collaborators) {
     if (c.id === me.id) continue;
@@ -211,10 +233,10 @@ function Presence({ users, collaborators, me, documentId }: { users: PresenceUse
   const othersEditing = faces.some((f) => f.status === "editing");
   return (
     <div className="presence">
-      {faces.slice(0, MAX_FACES).map((f) => (
+      {faces.slice(0, max).map((f) => (
         <PresenceAvatar key={f.id} face={f} documentId={documentId} />
       ))}
-      {faces.length > MAX_FACES && <span className="presence-more">+{faces.length - MAX_FACES}</span>}
+      {faces.length > max && <span className="presence-more">+{faces.length - max}</span>}
       {othersEditing && <CursorNamesToggle />}
     </div>
   );
@@ -229,6 +251,19 @@ function CursorNamesToggle() {
       {min ? <EyeOff size={14} /> : <Eye size={14} />}
     </button>
   );
+}
+
+/** An element's width, kept up to date as it resizes (0 until it's measured). */
+function useWidth(ref: RefObject<HTMLElement | null>) {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
 }
 
 export function useDismiss(open: boolean, close: () => void) {

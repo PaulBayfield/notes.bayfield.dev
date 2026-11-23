@@ -16,7 +16,7 @@ import type { PresenceUser } from "./editor/collab";
 import { OPEN_COLLECTION_EVENT } from "./editor/nodeviews";
 import { closeAll as closeAllCollab } from "./editor/collab";
 import { Sidebar, type DocTarget, type DropTarget } from "./components/Sidebar";
-import { DropdownMenu, PublishButton, Toolbar, type Crumb } from "./components/Toolbar";
+import { PublishButton, Toolbar, type Crumb } from "./components/Toolbar";
 import { useDocumentActions } from "./components/DocumentActions";
 import { menu as tidyMenu, type MenuEntry } from "./components/Menu";
 import { editorAt } from "./editor/registry";
@@ -820,7 +820,7 @@ function NotesApp({
           documentId={route.name === "doc" ? meta?.doc.id : undefined}
           starred={meta ? !!actions.isStarred(meta.doc.id) : routeCollection ? !!actions.isCollectionStarred(routeCollection.id) : undefined}
           onToggleStar={meta ? () => actions.toggleStar(meta.doc.id) : routeCollection ? () => actions.toggleCollectionStar(routeCollection.id) : undefined}
-          docMenu={meta?.doc.collectionId ? <DropdownMenu title={t("more")} items={actions.docMenu()} /> : undefined}
+          docMenu={meta?.doc.collectionId ? actions.docMenu() : undefined}
           share={
             meta ? (
               <ShareButton
