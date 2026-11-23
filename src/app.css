@@ -625,6 +625,19 @@ body.resizing {
     width: min(340px, 92vw);
     padding-top: env(safe-area-inset-top);
   }
+  /* Split view stacks the two pages: side by side they'd be a few words wide. */
+  .panes.split {
+    flex-direction: column;
+  }
+  .pane-divider {
+    display: none;
+  }
+  .pane-divider + .pane.split {
+    border-top: 1px solid var(--border-strong);
+  }
+  .pane.split .pane-close {
+    opacity: 1;
+  }
   .sidebar {
     position: fixed;
     top: 0;

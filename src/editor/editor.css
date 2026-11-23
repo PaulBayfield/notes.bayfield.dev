@@ -117,6 +117,17 @@ button.doc-icon:hover {
   .doc {
     padding: 28px 18px 0;
   }
+  /* The top padding is too short to hold it: it sits above the title instead of over it. */
+  .doc-add-icon {
+    position: static;
+    margin-bottom: 8px;
+  }
+}
+/* No hover on touch screens: keep it in sight. */
+@media (hover: none) {
+  .doc-add-icon {
+    opacity: 1;
+  }
 }
 
 /* ---------- Content ---------- */
