@@ -368,6 +368,10 @@ body.resizing {
   color: var(--text-muted);
   margin-left: 4px;
 }
+.presence-names {
+  margin-left: 4px;
+  color: var(--text-muted);
+}
 
 /* ---------- Pages ---------- */
 

@@ -772,7 +772,7 @@ function NotesApp({
   };
 
   return (
-    <div className={`app${focus ? " focus-mode" : ""}`}>
+    <div className={`app${focus ? " focus-mode" : ""}${settings.minimiseCursorNames ? " cursor-names-min" : ""}`}>
       {mobile && drawerOpen && <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />}
       {(mobile ? drawerOpen : settings.sidebar && !focus) && (
         <Sidebar

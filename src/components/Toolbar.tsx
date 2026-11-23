@@ -8,7 +8,7 @@ import { MenuList, type MenuEntry } from "./Menu";
 import { Avatar, HoverCard, PresenceCard } from "./Avatar";
 import { userDetails, type Collection } from "../lib/api";
 import { EntityIcon } from "./EntityIcon";
-import { ArrowLeft, ArrowRight, Columns, ListTree, Maximize, Minimize, More, PanelLeft, PanelRight, Star, WinMaximize, WinMinimize, X } from "./icons";
+import { ArrowLeft, ArrowRight, Columns, Eye, EyeOff, ListTree, Maximize, Minimize, More, PanelLeft, PanelRight, Star, WinMaximize, WinMinimize, X } from "./icons";
 
 export interface Crumb {
   label: string;
@@ -207,13 +207,27 @@ function Presence({ users, collaborators, me, documentId }: { users: PresenceUse
     else faces.push({ id: c.id, name: c.name, color: c.color, avatarUrl: c.avatarUrl, status: "away" });
   }
   if (!faces.length) return null;
+  // Someone else's cursor is in the page: their name may cover lines, so it can be shrunk.
+  const othersEditing = faces.some((f) => f.status === "editing");
   return (
     <div className="presence">
       {faces.slice(0, MAX_FACES).map((f) => (
         <PresenceAvatar key={f.id} face={f} documentId={documentId} />
       ))}
       {faces.length > MAX_FACES && <span className="presence-more">+{faces.length - MAX_FACES}</span>}
+      {othersEditing && <CursorNamesToggle />}
     </div>
+  );
+}
+
+function CursorNamesToggle() {
+  const { t, settings, update } = useSettings();
+  const min = settings.minimiseCursorNames;
+  const label = t(min ? "showCursorNames" : "hideCursorNames");
+  return (
+    <button className="icon-button small presence-names" aria-label={label} aria-pressed={min} title={label} onClick={() => update({ minimiseCursorNames: !min })}>
+      {min ? <EyeOff size={14} /> : <Eye size={14} />}
+    </button>
   );
 }
 

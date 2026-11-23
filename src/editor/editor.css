@@ -667,6 +667,33 @@ button.doc-icon:hover {
   white-space: nowrap;
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
 }
+/* Names minimised: a dot on top of the cursor, with the name on hover. */
+.cursor-names-min .doc-content .ProseMirror-yjs-cursor > div {
+  pointer-events: auto;
+  cursor: default;
+  top: -4px;
+  left: -3.5px;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+  overflow: hidden;
+}
+.cursor-names-min .doc-content .ProseMirror-yjs-cursor > div:hover {
+  top: -1.35em;
+  left: -1px;
+  width: auto;
+  height: auto;
+  padding: 1px 5px;
+  border-radius: 4px 4px 4px 0;
+  font-size: 11px;
+  z-index: 5;
+}
+/* Focus mode: only the coloured cursors, no names. */
+.focus-mode .doc-content .ProseMirror-yjs-cursor > div {
+  display: none;
+}
 .doc-content .ProseMirror-yjs-selection {
   opacity: 0.35;
 }

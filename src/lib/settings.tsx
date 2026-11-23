@@ -24,6 +24,8 @@ export interface Settings {
   font: EditorFont;
   fontSize: number;
   spellcheck: boolean;
+  /** Collaborators' cursors show a small dot instead of their name (the name shows on hover). */
+  minimiseCursorNames: boolean;
   /** Ids of expanded rows in the sidebar tree. */
   expanded: string[];
   /** Sidebar sections the user folded ("starred", or a collection id). */
@@ -82,6 +84,7 @@ const DEFAULTS: Settings = {
   font: "sans",
   fontSize: 16,
   spellcheck: true,
+  minimiseCursorNames: false,
   expanded: [],
   folded: [],
   lastServer: import.meta.env.VITE_OUTLINE_URL ?? "notes.bayfield.dev",

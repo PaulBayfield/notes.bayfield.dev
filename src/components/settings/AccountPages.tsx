@@ -225,6 +225,9 @@ export function PreferencesPage() {
         <Row label={t("spellcheck")}>
           <Switch checked={settings.spellcheck} onChange={(on) => update({ spellcheck: on })} />
         </Row>
+        <Row label={t("minimiseCursorNames")} hint={t("minimiseCursorNamesHint")}>
+          <Switch checked={settings.minimiseCursorNames} onChange={(on) => update({ minimiseCursorNames: on })} />
+        </Row>
         <Row label={t("smartText")} hint={t("smartTextHint")}>
           <Switch
             checked={me.preferences?.enableSmartText !== false}
