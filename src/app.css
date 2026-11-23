@@ -580,6 +580,23 @@ body.resizing {
     box-shadow: var(--shadow);
   }
 }
+/* The panel over the page (narrow windows): it slides in, and a click beside it puts it away. */
+.panel.overlay {
+  animation: panel-in 180ms ease-out;
+}
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  background: rgba(0, 0, 0, 0.18);
+  animation: fade-in 180ms ease-out;
+}
+@keyframes panel-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
 @media (max-width: 760px) {
   body {
     height: 100dvh;
@@ -588,9 +605,12 @@ body.resizing {
     padding: 0 8px;
     gap: 4px;
   }
-  .nav-buttons,
-  .toolbar .panel-toggle {
+  .nav-buttons {
     display: none;
+  }
+  .panel {
+    width: min(340px, 92vw);
+    padding-top: env(safe-area-inset-top);
   }
   .sidebar {
     position: fixed;

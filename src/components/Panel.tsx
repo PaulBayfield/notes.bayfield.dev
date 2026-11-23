@@ -10,7 +10,8 @@ import { ShortcutList } from "./SettingsDialog";
 import { WindowControls } from "./Toolbar";
 import { Comments } from "./Comments";
 import { History, Insights } from "./History";
-import { HistoryIcon, Info, ListTree, MessageSquare } from "./icons";
+import { HistoryIcon, Info, ListTree, MessageSquare, X } from "./icons";
+import { MOBILE_QUERY } from "../lib/useMediaQuery";
 
 export type PanelTab = "contents" | "comments" | "history" | "insights";
 
@@ -39,6 +40,8 @@ interface Props {
   onRestored: () => void;
   /** Focus mode: just the table of contents, without the other tabs. */
   contentsOnly?: boolean;
+  /** Set when the panel slides over the page (narrow windows): it gets its own close button. */
+  onClose?: () => void;
 }
 
 /** Right panel: contents, details and comments of the open document, or the shortcuts. */
@@ -55,10 +58,12 @@ export function Panel(p: Props) {
     if (!view) return;
     const dom = view.nodeDOM(pos);
     if (dom instanceof HTMLElement) dom.scrollIntoView({ behavior: "smooth", block: "start" });
+    // On a phone the panel covers the whole page: get it out of the way to show the heading.
+    if (p.onClose && matchMedia(MOBILE_QUERY).matches) p.onClose();
   };
 
   return (
-    <aside className="panel">
+    <aside className={`panel${p.onClose ? " overlay" : ""}`}>
       <div className="panel-header" data-tauri-drag-region>
         {meta && !p.contentsOnly ? (
           <div className="panel-tabs" role="tablist">
@@ -74,6 +79,11 @@ export function Panel(p: Props) {
           </span>
         )}
         <div className="toolbar-spacer" data-tauri-drag-region />
+        {p.onClose && (
+          <button className="icon-button panel-close" title={`${t("close")} (Esc)`} aria-label={t("close")} onClick={p.onClose}>
+            <X size={16} />
+          </button>
+        )}
         {isTauri && <WindowControls />}
       </div>
       <div className="panel-body">
