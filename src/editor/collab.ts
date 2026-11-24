@@ -4,7 +4,8 @@ import { HocuspocusProvider, WebSocketStatus } from "@hocuspocus/provider";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
 import type { Schema } from "prosemirror-model";
-import { prosemirrorJSONToYXmlFragment } from "y-prosemirror";
+import type { EditorView } from "prosemirror-view";
+import { absolutePositionToRelativePosition, prosemirrorJSONToYXmlFragment, relativePositionToAbsolutePosition, ySyncPluginKey } from "y-prosemirror";
 import { EDITOR_VERSION, schema } from "./schema";
 import { demoContent, isDemo } from "../lib/demo";
 
@@ -16,6 +17,8 @@ export interface PresenceUser {
   color: string;
   /** Their cursor is in the document (rather than just reading). */
   editing: boolean;
+  /** Where they are in the document is known, so you can go there. */
+  located: boolean;
 }
 
 /** Close codes Outline's collaboration server uses (shared/collaboration/CloseEvents.ts). */
@@ -258,11 +261,44 @@ export function unknownTypes(fragment: Y.XmlFragment, schema: Schema): string[] 
 export function presence(provider: HocuspocusProvider, selfId: string): PresenceUser[] {
   const users = new Map<string, PresenceUser>();
   provider.awareness.getStates().forEach((state, clientId) => {
-    const user = state.user as Omit<PresenceUser, "editing"> | undefined;
+    const user = state.user as Omit<PresenceUser, "editing" | "located"> | undefined;
     if (!user?.id || clientId === provider.awareness.clientID || user.id === selfId) return;
     // y-prosemirror publishes a cursor while their editor has focus.
     const editing = !!state.cursor || !!users.get(user.id)?.editing;
-    users.set(user.id, { id: user.id, name: user.name, color: user.color, editing });
+    const located = !!state.cursor?.head || !!state[LAST_CURSOR] || !!users.get(user.id)?.located;
+    users.set(user.id, { id: user.id, name: user.name, color: user.color, editing, located });
   });
   return [...users.values()];
+}
+
+/**
+ * Awareness field: where your cursor last was. y-prosemirror's `cursor` is cleared when the editor
+ * loses focus; this one stays, so others can still go to where you are.
+ */
+const LAST_CURSOR = "lastCursor";
+
+/** Asks the editor showing `documentId` to go to where `userId` is (`{ userId, documentId }`). */
+export const GOTO_USER_EVENT = "notes:goto-user";
+
+/** Shares where your cursor is now (as a Yjs position, which follows edits). */
+export function shareLastCursor(view: EditorView, provider: HocuspocusProvider) {
+  const y = ySyncPluginKey.getState(view.state);
+  if (!y?.binding) return;
+  provider.setAwarenessField(LAST_CURSOR, absolutePositionToRelativePosition(view.state.selection.head, y.type, y.binding.mapping));
+}
+
+/** Where someone is in the document: their cursor, or where it last was. */
+export function userPosition(view: EditorView, provider: HocuspocusProvider, userId: string): number | null {
+  const y = ySyncPluginKey.getState(view.state);
+  if (!y?.binding) return null;
+  let rel: unknown = null;
+  provider.awareness.getStates().forEach((state, clientId) => {
+    if (clientId === provider.awareness.clientID || (state.user as { id?: string } | undefined)?.id !== userId) return;
+    // A live cursor wins over a remembered one (they may have the page open twice).
+    if (state.cursor?.head) rel = state.cursor.head;
+    else if (!rel && state[LAST_CURSOR]) rel = state[LAST_CURSOR];
+  });
+  if (!rel) return null;
+  const pos = relativePositionToAbsolutePosition(y.doc, y.type, Y.createRelativePositionFromJSON(rel), y.binding.mapping);
+  return pos === null ? null : Math.max(0, Math.min(pos, view.state.doc.content.size));
 }

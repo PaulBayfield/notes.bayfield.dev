@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { documentActivity, resolveUrl, userDetails, type User, type UserDetails } from "../lib/api";
 import { useSettings } from "../lib/settings";
-import { Clock, Eye, Pencil } from "./icons";
+import { Clock, Eye, MapPin, Pencil } from "./icons";
 
 /** A user's picture, or their initial on their colour. */
 export function Avatar({ user, size = 24, className = "" }: { user: Pick<User, "name" | "color" | "avatarUrl">; size?: number; className?: string }) {
@@ -30,6 +30,7 @@ export function PresenceCard({
   color,
   status,
   documentId,
+  onGoTo,
 }: {
   userId: string;
   name: string;
@@ -37,6 +38,8 @@ export function PresenceCard({
   status: "viewing" | "editing" | "away";
   /** The open page, to say when they last edited and viewed it. */
   documentId?: string;
+  /** Goes to where they are in the page; absent when that isn't known. */
+  onGoTo?: () => void;
 }) {
   const { t, lang, f } = useSettings();
   const [details, setDetails] = useState<UserDetails | null>(null);
@@ -78,6 +81,11 @@ export function PresenceCard({
           {status !== "away" && <div className="presence-card-status">{t("online")}</div>}
         </div>
       </div>
+      {onGoTo && (
+        <button className="primary-button small with-icon presence-card-goto" onClick={onGoTo}>
+          <MapPin size={14} /> {t("goToUser")}
+        </button>
+      )}
       <div className="presence-card-rows">
         {localTime && (
           <div>

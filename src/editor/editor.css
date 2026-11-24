@@ -1221,3 +1221,17 @@ body.block-dragging * {
   text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
+
+/* The line someone is on, after "Go to their position". */
+@keyframes presence-flash {
+  from {
+    background-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.presence-flash {
+  animation: presence-flash 1.6s ease-out;
+  border-radius: 4px;
+}

@@ -10,7 +10,7 @@ import { ySyncPlugin, yCursorPlugin, yUndoPlugin } from "y-prosemirror";
 import { docIdFromHref, uploadAttachment, uploadAttachmentFromPath, webUrl, type Attachment, type User } from "../lib/api";
 import type { Translate } from "../lib/i18n";
 import { isTauri, openExternal, pickFiles } from "../lib/platform";
-import { acquire, presence, unknownTypes, type CollabStatus, type PresenceUser } from "./collab";
+import { acquire, GOTO_USER_EVENT, presence, shareLastCursor, unknownTypes, userPosition, type CollabStatus, type PresenceUser } from "./collab";
 import { BubbleMenu, LINK_EVENT, PasteMenu, SuggestMenu } from "./menus";
 import { pasteMenuPlugin, pasteStructured, pasteUrl } from "./paste";
 import { BlockHandle } from "./blockHandle";
@@ -30,6 +30,22 @@ import { looksLikeMarkdown, markdownToSlice } from "./markdown";
 import { autocorrectPlugin, refreshSpelling, spellcheckPlugin, SYSTEM_SPELLING } from "./spelling";
 import "katex/dist/katex.min.css";
 import "@benrbray/prosemirror-math/dist/prosemirror-math.css";
+
+/** Scrolls a position into the middle of the view and briefly highlights its line. */
+function revealPosition(view: EditorView, pos: number) {
+  const $pos = view.state.doc.resolve(pos);
+  // The innermost block (a paragraph, a list item's paragraph, a table cell's...).
+  const blockPos = $pos.depth > 0 ? $pos.before($pos.depth) : pos;
+  const dom = view.nodeDOM(blockPos);
+  const el = dom instanceof HTMLElement ? dom : (view.domAtPos(pos).node.parentElement ?? null);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("presence-flash");
+  // Restarts the animation when going to the same place twice.
+  void el.offsetWidth;
+  el.classList.add("presence-flash");
+  setTimeout(() => el.classList.remove("presence-flash"), 1600);
+}
 
 /** The webview's own spell check, off where the app checks spelling itself (see `spellcheckPlugin`). */
 const webviewSpellcheck = (on: boolean) => on && !SYSTEM_SPELLING;
@@ -137,6 +153,21 @@ export function Editor(props: Props) {
     provider.setAwarenessField("user", { id: p().user.id, name: p().user.name, color: p().user.color });
     const onAwareness = () => !destroyed && p().onPresence(presence(provider, p().user.id));
     provider.on("awarenessChange", onAwareness);
+    // Where your cursor is, for others to come to (see `shareLastCursor`); not on every keystroke.
+    let shareTimer: ReturnType<typeof setTimeout> | undefined;
+    const shareCursor = (v: EditorView) => {
+      clearTimeout(shareTimer);
+      shareTimer = setTimeout(() => !destroyed && !v.isDestroyed && shareLastCursor(v, provider), 300);
+    };
+    // "Go to" on someone in the header: scrolls to them and flashes the line.
+    const onGotoUser = (e: Event) => {
+      const { userId, documentId } = (e as CustomEvent<{ userId: string; documentId: string }>).detail;
+      const v = viewRef.current;
+      if (destroyed || documentId !== docId || !v || v.isDestroyed) return;
+      const pos = userPosition(v, provider, userId);
+      if (pos !== null) revealPosition(v, pos);
+    };
+    window.addEventListener(GOTO_USER_EVENT, onGotoUser);
 
     const openLink = (href: string, newTab = false) => {
       const id = docIdFromHref(href);
@@ -248,6 +279,7 @@ export function Editor(props: Props) {
           for (const spot of tracked) spot.pos = tr.mapping.map(spot.pos);
           setState(next);
           if (tr.docChanged) reportHeadings(next);
+          if (tr.selectionSet && v.hasFocus()) shareCursor(v);
         },
         handleDOMEvents: {
           click(v, event) {
@@ -319,6 +351,8 @@ export function Editor(props: Props) {
       unregister();
       clearTimeout(headingTimer);
       provider.off("awarenessChange", onAwareness);
+      window.removeEventListener(GOTO_USER_EVENT, onGotoUser);
+      clearTimeout(shareTimer);
       editorView?.destroy();
       viewRef.current = null;
       setView(null);

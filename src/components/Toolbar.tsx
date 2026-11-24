@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { User } from "../lib/api";
-import type { PresenceUser } from "../editor/collab";
+import { GOTO_USER_EVENT, type PresenceUser } from "../editor/collab";
 import type { EditorStatus } from "../editor/Editor";
 import { isTauri, mod } from "../lib/platform";
 import { useSettings } from "../lib/settings";
@@ -193,6 +193,8 @@ interface Face {
   id: string;
   name: string;
   color: string;
+  /** Their position in the page is known (see `PresenceUser.located`). */
+  located?: boolean;
   avatarUrl?: string | null;
   status: "editing" | "viewing" | "away";
 }
@@ -206,7 +208,22 @@ function PresenceAvatar({ face, documentId }: { face: Face; documentId?: string 
       .catch(() => {});
   }, [face.id, face.avatarUrl]);
   return (
-    <HoverCard card={() => <PresenceCard userId={face.id} name={face.name} color={face.color} status={face.status} documentId={documentId} />}>
+    <HoverCard
+      card={() => (
+        <PresenceCard
+          userId={face.id}
+          name={face.name}
+          color={face.color}
+          status={face.status}
+          documentId={documentId}
+          onGoTo={
+            face.located && documentId
+              ? () => window.dispatchEvent(new CustomEvent(GOTO_USER_EVENT, { detail: { userId: face.id, documentId } }))
+              : undefined
+          }
+        />
+      )}
+    >
       <span className={`presence-avatar ${face.status}`} style={{ ["--c" as string]: face.color }}>
         <Avatar user={{ name: face.name, color: face.color, avatarUrl }} size={24} />
       </span>
@@ -221,7 +238,7 @@ const MAX_FACES = 6;
  * out: your account picture sits right next to them.
  */
 function Presence({ users, collaborators, me, documentId, max }: { users: PresenceUser[]; collaborators: User[]; me: User; documentId?: string; max: number }) {
-  const faces: Face[] = users.filter((u) => u.id !== me.id).map((u) => ({ id: u.id, name: u.name, color: u.color, status: u.editing ? "editing" : "viewing" }));
+  const faces: Face[] = users.filter((u) => u.id !== me.id).map((u) => ({ id: u.id, name: u.name, color: u.color, status: u.editing ? "editing" : "viewing", located: u.located }));
   for (const c of collaborators) {
     if (c.id === me.id) continue;
     const here = faces.find((f) => f.id === c.id);

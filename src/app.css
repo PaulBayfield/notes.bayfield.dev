@@ -1377,6 +1377,9 @@ body.resizing {
   align-items: center;
   gap: 8px;
 }
+.presence-card-goto {
+  align-self: flex-start;
+}
 
 /* ---------- Pins, collection page ---------- */
 
