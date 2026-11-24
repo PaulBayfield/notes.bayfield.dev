@@ -1214,3 +1214,10 @@ body.block-dragging * {
 .ProseMirror-hideselection {
   caret-color: transparent;
 }
+
+/* Misspelled words, found by the Windows spell checker (desktop app on Windows). */
+.spell-error {
+  text-decoration: underline wavy #e5484d;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}

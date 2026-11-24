@@ -811,7 +811,6 @@ pub fn run() {
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             shell::setup(app)?;
-            spelling::install(app.handle());
             let handle = app.handle().clone();
             restart_realtime(&handle);
             // Launched by an `outline://` link while not running.
@@ -833,7 +832,9 @@ pub fn run() {
             pick_files,
             upload_file,
             upload_bytes,
-            spelling::context_menu_pick,
+            spelling::spelling_check,
+            spelling::spelling_add,
+            spelling::spelling_errors,
             autostart::autostart_enabled,
             autostart::set_autostart,
             prefs::prefs_token_get,

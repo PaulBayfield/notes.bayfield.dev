@@ -24,6 +24,8 @@ export interface Settings {
   font: EditorFont;
   fontSize: number;
   spellcheck: boolean;
+  /** Corrects misspelled words as you type, from Windows' autocorrect list (desktop on Windows). */
+  autocorrect: boolean;
   /** Collaborators' cursors show a small dot instead of their name (the name shows on hover). */
   minimiseCursorNames: boolean;
   /** Ids of expanded rows in the sidebar tree. */
@@ -84,6 +86,7 @@ const DEFAULTS: Settings = {
   font: "sans",
   fontSize: 16,
   spellcheck: true,
+  autocorrect: true,
   minimiseCursorNames: false,
   expanded: [],
   folded: [],

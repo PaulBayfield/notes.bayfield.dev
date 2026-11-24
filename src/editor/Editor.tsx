@@ -27,8 +27,12 @@ import { findPlugin } from "./find";
 import { mermaidEditingPlugin } from "./mermaid";
 import { headingPrefixPlugin, setHeadingPrefix, type HeadingPrefixStyle } from "./headingPrefix";
 import { looksLikeMarkdown, markdownToSlice } from "./markdown";
+import { autocorrectPlugin, refreshSpelling, spellcheckPlugin, SYSTEM_SPELLING } from "./spelling";
 import "katex/dist/katex.min.css";
 import "@benrbray/prosemirror-math/dist/prosemirror-math.css";
+
+/** The webview's own spell check, off where the app checks spelling itself (see `spellcheckPlugin`). */
+const webviewSpellcheck = (on: boolean) => on && !SYSTEM_SPELLING;
 
 export interface Heading {
   level: number;
@@ -213,6 +217,8 @@ export function Editor(props: Props) {
             },
           }),
           pasteMenuPlugin(),
+          autocorrectPlugin(() => p().spellcheck),
+          spellcheckPlugin(() => p().spellcheck && p().editable),
           ...editorKeymaps(),
           mathPlugin,
           // Drag a column's right edge to resize it; widths are kept in the cells (`colwidth`), as in Outline.
@@ -231,7 +237,7 @@ export function Editor(props: Props) {
         state: editorState,
         editable: () => p().editable,
         nodeViews: nodeViews({ openLink, openDocument: (id, newTab) => p().onOpenDocument(id, newTab), foldedToggles: new Set(), embeds: p().embeds }),
-        attributes: { class: "doc-content", spellcheck: String(p().spellcheck) },
+        attributes: { class: "doc-content", spellcheck: String(webviewSpellcheck(p().spellcheck)) },
         // `this`, not `editorView`: y-prosemirror dispatches while the view is still being constructed.
         dispatchTransaction(this: EditorView, tr) {
           const v = this;
@@ -329,7 +335,8 @@ export function Editor(props: Props) {
   // Editable and spellcheck can change without recreating the editor.
   useEffect(() => {
     if (!view) return;
-    view.setProps({ attributes: { class: "doc-content", spellcheck: String(props.spellcheck) } });
+    view.setProps({ attributes: { class: "doc-content", spellcheck: String(webviewSpellcheck(props.spellcheck)) } });
+    refreshSpelling(view);
   }, [view, props.spellcheck, props.editable]);
 
   /** Clicking the empty space under the document puts the cursor at its end. */

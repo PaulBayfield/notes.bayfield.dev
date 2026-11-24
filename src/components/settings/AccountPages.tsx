@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, chooseAndUploadImage, installationInfo, setNotification, updateMe, type InstallationInfo } from "../../lib/api";
 import { getAutostart, setAutostart } from "../../lib/desktop";
+import { SYSTEM_SPELLING } from "../../editor/spelling";
 import type { StringKey } from "../../lib/i18n";
 import { isTauri, openExternal } from "../../lib/platform";
 import { APP_VERSION, canInstallUpdates, installStatus, RELEASES_URL, useInstallUpdate, useUpdateCheck } from "../../lib/updates";
@@ -225,6 +226,11 @@ export function PreferencesPage() {
         <Row label={t("spellcheck")}>
           <Switch checked={settings.spellcheck} onChange={(on) => update({ spellcheck: on })} />
         </Row>
+        {SYSTEM_SPELLING && (
+          <Row label={t("autocorrect")} hint={t("autocorrectHint")} disabled={!settings.spellcheck}>
+            <Switch checked={settings.autocorrect} disabled={!settings.spellcheck} onChange={(on) => update({ autocorrect: on })} />
+          </Row>
+        )}
         <Row label={t("minimiseCursorNames")} hint={t("minimiseCursorNamesHint")}>
           <Switch checked={settings.minimiseCursorNames} onChange={(on) => update({ minimiseCursorNames: on })} />
         </Row>

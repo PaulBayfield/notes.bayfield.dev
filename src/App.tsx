@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Mouse
 import type { EditorView } from "prosemirror-view";
 import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
-import { isMac, isTauri, isWindows, openExternal } from "./lib/platform";
+import { isMac, isTauri, openExternal } from "./lib/platform";
 import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
 import { parseRoute, parseTabPath, routePath, tabPath, useTabs, type Route } from "./lib/router";
 import { SettingsProvider, forServer, useSettings } from "./lib/settings";
@@ -40,10 +40,9 @@ import { EntityIcon } from "./components/EntityIcon";
 import { Archive, FileText, Home as HomeIcon, Pencil, Trash } from "./components/icons";
 import { NotificationsButton, type BadgeStyle } from "./components/NotificationsButton";
 import { setSmartText } from "./editor/rules";
+import { addWord, checkWord, replaceWord, setAutocorrect, SYSTEM_SPELLING, wordAt } from "./editor/spelling";
 import { usePrefsSync } from "./lib/prefs";
 
-/** Desktop on Windows: WebView2's spelling suggestions are added to the editor's right-click menu. */
-const NATIVE_SPELLING = isTauri && isWindows;
 
 export default function App() {
   return (
@@ -520,14 +519,22 @@ function NotesApp({
       if (e.defaultPrevented || e.shiftKey || !(e.target instanceof Element)) return;
       const items = contextMenuFor(e.target, e.clientX, e.clientY, { ...contextRef.current, back: router.back, forward: router.forward });
       if (!items?.length) return;
-      // In the editor the native menu is let through: the desktop app catches it before it
-      // opens and hands over its spelling suggestions, which go at the top of ours.
-      if (NATIVE_SPELLING && editorAt(e.target)?.view.editable) {
-        spellingMenu.current = { x: e.clientX, y: e.clientY, items };
-        return;
-      }
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY, items });
+      const at = { x: e.clientX, y: e.clientY };
+      const view = editorAt(e.target)?.view;
+      // On a misspelled word, Windows' suggestions go at the top.
+      if (!SYSTEM_SPELLING || !view?.editable || !spellcheckRef.current) return setMenu({ ...at, items });
+      const pos = view.posAtCoords({ left: at.x, top: at.y })?.pos;
+      const word = pos === undefined ? null : wordAt(view.state, pos);
+      if (!word) return setMenu({ ...at, items });
+      checkWord(word.word)
+        .then((r) => {
+          if (!r.misspelled) return setMenu({ ...at, items });
+          const suggestions: MenuEntry[] = r.suggestions.map((s) => ({ label: s, onClick: () => (replaceWord(view, word, s), view.focus()) }));
+          const add: MenuEntry = { label: contextRef.current.t("addToDictionary"), onClick: () => void addWord(view, word.word) };
+          setMenu({ ...at, items: tidyMenu([...suggestions, add, { kind: "separator" }, ...items]) });
+        })
+        .catch(() => setMenu({ ...at, items }));
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("contextmenu", onContext);
@@ -539,37 +546,10 @@ function NotesApp({
     };
   }, [router]);
 
-  // The spelling suggestions for a right-click in the editor (see `onContext`).
-  const spellingMenu = useRef<{ x: number; y: number; items: MenuEntry[] } | null>(null);
-  useEffect(() => {
-    if (!NATIVE_SPELLING) return;
-    let stop: (() => void) | null = null;
-    let cancelled = false;
-    void (async () => {
-      const [{ listen }, { invoke }] = await Promise.all([import("@tauri-apps/api/event"), import("@tauri-apps/api/core")]);
-      const pick = (id: number | null) => void invoke("context_menu_pick", { id }).catch(() => {});
-      const unlisten = await listen<{ id: number; label: string }[]>("spelling-menu", ({ payload }) => {
-        const pending = spellingMenu.current;
-        spellingMenu.current = null;
-        if (!pending) return pick(null);
-        let chosen: number | null = null;
-        const suggestions: MenuEntry[] = payload.map((s) => ({ label: s.label, onClick: () => (chosen = s.id) }));
-        setMenu({
-          x: pending.x,
-          y: pending.y,
-          items: tidyMenu([...suggestions, { kind: "separator" }, ...pending.items]),
-          // A menu item runs after the menu closes: answer once it has.
-          onDismiss: () => setTimeout(() => pick(chosen), 0),
-        });
-      });
-      if (cancelled) unlisten();
-      else stop = unlisten;
-    })();
-    return () => {
-      cancelled = true;
-      stop?.();
-    };
-  }, []);
+  // Read by the right-click menu, which is set up once.
+  const spellcheckRef = useRef(settings.spellcheck);
+  spellcheckRef.current = settings.spellcheck;
+  useEffect(() => setAutocorrect(settings.autocorrect), [settings.autocorrect]);
 
   // Collection mentions in documents open the collection here.
   useEffect(() => {
