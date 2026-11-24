@@ -13,13 +13,11 @@ async function invoke(cmd: string, args?: Record<string, unknown>) {
 
 /** Whether the app launches when the user logs in to Windows. */
 export async function getAutostart(): Promise<boolean> {
-  const { isEnabled } = await import("@tauri-apps/plugin-autostart");
-  return isEnabled();
+  return (await invoke("autostart_enabled")) as boolean;
 }
 
 export async function setAutostart(on: boolean): Promise<void> {
-  const { enable, disable } = await import("@tauri-apps/plugin-autostart");
-  await (on ? enable() : disable());
+  await invoke("set_autostart", { on });
 }
 
 /** Keeps the native side (close button, startup, tray labels) in step with settings. */

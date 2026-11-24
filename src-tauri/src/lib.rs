@@ -11,6 +11,7 @@
 //!   which forwards them to the server with the token attached. This also avoids CORS (Outline's
 //!   API doesn't send CORS headers) and lets `<img>` load attachments that need authentication.
 
+mod autostart;
 mod prefs;
 mod realtime;
 mod shell;
@@ -833,6 +834,8 @@ pub fn run() {
             upload_file,
             upload_bytes,
             spelling::context_menu_pick,
+            autostart::autostart_enabled,
+            autostart::set_autostart,
             prefs::prefs_token_get,
             prefs::prefs_token_set,
             prefs::prefs_computer_name,
