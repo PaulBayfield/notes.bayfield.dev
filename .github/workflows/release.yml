@@ -15,6 +15,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history and tags, to list the commits since the previous release.
+          fetch-depth: 0
+
+      - name: Write the release notes from the commits
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            bash scripts/release-notes.sh "$GITHUB_REF_NAME"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check the tag matches package.json
         shell: bash
@@ -50,7 +63,5 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Notes ${{ github.ref_name }}
-          releaseBody: |
-            Windows installers: `Notes_*_x64-setup.exe` (recommended) or the `.msi`.
-            The installer isn't code-signed, so SmartScreen may ask you to confirm (More info → Run anyway).
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
