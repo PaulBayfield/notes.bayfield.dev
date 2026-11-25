@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { forgetWorkspace, host, listAccounts, savedSessions, switchWorkspace, type Account } from "../lib/accounts";
 import { serverConfig, signIn, type Provider, type ServerConfig } from "../lib/auth";
+import { call } from "../lib/api";
 import { isTauri } from "../lib/platform";
 import { useSettings } from "../lib/settings";
 import { Avatar } from "./Avatar";
@@ -23,7 +24,16 @@ export function SignIn({ error: initialError, onSignedIn, current, onCancel, sta
   const [server, setServer] = useState(startServer ? host(startServer) : current ? "" : settings.lastServer);
   const [config, setConfig] = useState<ServerConfig | null>(null);
   const [busy, setBusy] = useState<"config" | "browser" | "switch" | null>(null);
-  const [error, setError] = useState<string | null>(initialError);
+  // Web: a sign-in that failed comes back with the reason (?notice=…).
+  const [error, setError] = useState<string | null>(() => initialError ?? (isTauri ? null : new URLSearchParams(location.search).get("notice")));
+  // Web: the server's sign-in options (its own login page when it has none to offer).
+  const [webConfig, setWebConfig] = useState<{ name?: string; logo?: string; providers: Provider[] } | null>(null);
+  useEffect(() => {
+    if (isTauri) return;
+    void call<{ name?: string; logo?: string; providers?: Provider[] }>("auth.config")
+      .then((r) => setWebConfig({ ...r.data, providers: (r.data.providers ?? []).filter((p) => p.authUrl.startsWith("/auth/") && p.id !== "email" && p.id !== "passkeys") }))
+      .catch(() => setWebConfig({ providers: [] }));
+  }, []);
   const [accounts, setAccounts] = useState<Account[]>(() => (isTauri ? listAccounts().filter((a) => a.server !== current) : []));
   /** Workspaces still signed in on this device: picking one needs no sign-in. */
   const [saved, setSaved] = useState<Set<string>>(new Set());
@@ -103,14 +113,22 @@ export function SignIn({ error: initialError, onSignedIn, current, onCancel, sta
         </div>
       )}
       <div className="signin-card">
-        <img className="signin-logo" src={config?.logo ?? `${import.meta.env.BASE_URL}favicon.svg`} alt="" />
-        <h1>{config?.name ?? (current ? t("addWorkspace") : t("appName"))}</h1>
+        <img className="signin-logo" src={config?.logo ?? webConfig?.logo ?? `${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+        <h1>{config?.name ?? webConfig?.name ?? (current ? t("addWorkspace") : t("appName"))}</h1>
         {!isTauri ? (
           <>
             <p className="muted">{t("webSignedOut")}</p>
-            <a className="primary-button" href="/">
-              {t("webSignIn")}
-            </a>
+            {webConfig?.providers.length ? (
+              webConfig.providers.map((p) => (
+                <a key={p.id} className="primary-button" href={p.authUrl}>
+                  {t("signInWith", { name: p.name })}
+                </a>
+              ))
+            ) : (
+              <a className="primary-button" href="/">
+                {t("webSignIn")}
+              </a>
+            )}
             <button className="link-button" onClick={() => location.reload()}>
               {t("reload")}
             </button>
