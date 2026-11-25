@@ -712,7 +712,7 @@ textarea:disabled {
 }
 .theme-picker {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(max(84px, calc((100% - 40px) / 5)), 1fr));
   gap: 10px;
 }
 .theme-card {

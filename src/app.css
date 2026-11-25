@@ -666,7 +666,7 @@ body.resizing {
     display: none;
   }
   .theme-picker {
-    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(max(84px, calc((100% - 40px) / 5)), 1fr));
   }
 }
 /* ---------- Workspaces ---------- */
