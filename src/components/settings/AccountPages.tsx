@@ -223,6 +223,9 @@ export function PreferencesPage() {
         <Row label={t("fullWidth")}>
           <Switch checked={settings.fullWidth} onChange={(on) => update({ fullWidth: on })} />
         </Row>
+        <Row label={t("tocSync")} hint={t("tocSyncHint")}>
+          <Switch checked={settings.tocSync} onChange={(on) => update({ tocSync: on })} />
+        </Row>
         <Row label={t("spellcheck")}>
           <Switch checked={settings.spellcheck} onChange={(on) => update({ spellcheck: on })} />
         </Row>

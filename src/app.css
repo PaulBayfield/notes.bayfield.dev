@@ -2617,3 +2617,18 @@ textarea.text-field {
     max-width: 100% !important;
   }
 }
+
+/* The contents' "follow the page" toggle, at the right of the tab title. */
+.panel-tab-title:has(.toc-sync) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 22px;
+}
+.toc-sync {
+  margin-left: auto;
+  color: var(--text-faint);
+}
+.toc-sync.active {
+  color: var(--primary);
+}

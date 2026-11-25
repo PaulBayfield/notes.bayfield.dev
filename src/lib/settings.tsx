@@ -21,6 +21,8 @@ export interface Settings {
   fullWidth: boolean;
   /** A document's sub-pages are listed under it. */
   subPages: boolean;
+  /** The table of contents follows the page: the heading being read is highlighted and kept in view. */
+  tocSync: boolean;
   font: EditorFont;
   fontSize: number;
   spellcheck: boolean;
@@ -83,6 +85,7 @@ const DEFAULTS: Settings = {
   panel: false,
   fullWidth: false,
   subPages: true,
+  tocSync: true,
   font: "sans",
   fontSize: 16,
   spellcheck: true,

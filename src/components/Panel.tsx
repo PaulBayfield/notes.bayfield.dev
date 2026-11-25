@@ -1,5 +1,5 @@
 import type { EditorView } from "prosemirror-view";
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { User } from "../lib/api";
 import type { Heading } from "../editor/Editor";
 import type { PresenceUser } from "../editor/collab";
@@ -10,7 +10,7 @@ import { ShortcutList } from "./SettingsDialog";
 import { WindowControls } from "./Toolbar";
 import { Comments } from "./Comments";
 import { History, Insights } from "./History";
-import { HistoryIcon, Info, ListTree, MessageSquare, X } from "./icons";
+import { Crosshair, HistoryIcon, Info, ListTree, MessageSquare, X } from "./icons";
 import { MOBILE_QUERY } from "../lib/useMediaQuery";
 
 export type PanelTab = "contents" | "comments" | "history" | "insights";
@@ -46,12 +46,19 @@ interface Props {
 
 /** Right panel: contents, details and comments of the open document, or the shortcuts. */
 export function Panel(p: Props) {
-  const { t } = useSettings();
+  const { t, settings, update } = useSettings();
   const { meta, headings } = p;
   const tab: PanelTab = p.contentsOnly ? "contents" : p.tab;
   const minLevel = Math.min(...headings.map((h) => h.level), 4);
 
-  const current = useCurrentHeading(p.viewRef, headings, tab === "contents" && !!meta);
+  const sync = settings.tocSync;
+  const current = useCurrentHeading(p.viewRef, headings, tab === "contents" && !!meta && sync);
+  // In a long table of contents, the heading being read stays in view.
+  const tocRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!sync || current < 0) return;
+    tocRef.current?.querySelector<HTMLElement>(".toc-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [current, sync]);
 
   const scrollTo = (pos: number) => {
     const view = p.viewRef.current;
@@ -87,7 +94,22 @@ export function Panel(p: Props) {
         {isTauri && <WindowControls />}
       </div>
       <div className="panel-body">
-        {meta && !p.contentsOnly && <div className="panel-tab-title">{t(TABS.find(([id]) => id === tab)![1])}</div>}
+        {meta && (!p.contentsOnly || tab === "contents") && (
+          <div className="panel-tab-title">
+            {!p.contentsOnly && t(TABS.find(([id]) => id === tab)![1])}
+            {tab === "contents" && headings.length > 0 && (
+              <button
+                className={`icon-button small toc-sync${sync ? " active" : ""}`}
+                aria-pressed={sync}
+                title={sync ? t("tocSyncOn") : t("tocSyncOff")}
+                aria-label={t("tocSync")}
+                onClick={() => update({ tocSync: !sync })}
+              >
+                <Crosshair size={14} />
+              </button>
+            )}
+          </div>
+        )}
         {!meta ? (
           <ShortcutList />
         ) : tab === "history" ? (
@@ -112,11 +134,11 @@ export function Panel(p: Props) {
         ) : (
           <>
             {headings.length ? (
-              <nav className="toc">
+              <nav className="toc" ref={tocRef}>
                 {headings.map((h, i) => (
                   <button
                     key={h.pos}
-                    className={`toc-item${i === current ? " active" : ""}${h.level === minLevel ? " top" : ""}`}
+                    className={`toc-item${sync && i === current ? " active" : ""}${h.level === minLevel ? " top" : ""}`}
                     style={{ ["--indent" as string]: h.level - minLevel }}
                     title={h.text}
                     onClick={() => scrollTo(h.pos)}
