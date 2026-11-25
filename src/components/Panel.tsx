@@ -1,6 +1,6 @@
 import type { EditorView } from "prosemirror-view";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { User } from "../lib/api";
+import { backlinks, type Doc, type User } from "../lib/api";
 import type { Heading } from "../editor/Editor";
 import type { PresenceUser } from "../editor/collab";
 import type { DocMeta } from "./DocumentView";
@@ -10,7 +10,8 @@ import { ShortcutList } from "./SettingsDialog";
 import { WindowControls } from "./Toolbar";
 import { Comments } from "./Comments";
 import { History, Insights } from "./History";
-import { Crosshair, HistoryIcon, Info, ListTree, MessageSquare, X } from "./icons";
+import { Crosshair, FileText, HistoryIcon, Info, ListTree, MessageSquare, X } from "./icons";
+import { EntityIcon } from "./EntityIcon";
 import { MOBILE_QUERY } from "../lib/useMediaQuery";
 
 export type PanelTab = "contents" | "comments" | "history" | "insights";
@@ -38,6 +39,8 @@ interface Props {
   onError: (e: unknown) => void;
   /** A revision was restored: reload the document. */
   onRestored: () => void;
+  /** Opens another document (a backlink). */
+  onOpenDoc: (id: string, newTab: boolean) => void;
   /** Focus mode: just the table of contents, without the other tabs. */
   contentsOnly?: boolean;
   /** Set when the panel slides over the page (narrow windows): it gets its own close button. */
@@ -117,6 +120,7 @@ export function Panel(p: Props) {
         ) : tab === "insights" ? (
           <>
             <Details meta={meta} presence={p.presence} />
+            <Backlinks documentId={meta.doc.id} docTick={p.docTick} onOpen={p.onOpenDoc} />
             <Insights documentId={meta.doc.id} onError={p.onError} />
           </>
         ) : tab === "comments" ? (
@@ -182,6 +186,33 @@ function Details({ meta, presence }: { meta: DocMeta; presence: PresenceUser[] }
           <span>{presence.map((u) => u.name).join(", ")}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The documents that link to this one. */
+function Backlinks({ documentId, docTick, onOpen }: { documentId: string; docTick: number; onOpen: (id: string, newTab: boolean) => void }) {
+  const { t } = useSettings();
+  const [docs, setDocs] = useState<Doc[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    backlinks(documentId)
+      .then((d) => !cancelled && setDocs(d))
+      .catch(() => !cancelled && setDocs([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [documentId, docTick]);
+  if (!docs?.length) return null;
+  return (
+    <div className="panel-section backlinks">
+      <div className="panel-subtitle">{t("referencedBy")}</div>
+      {docs.map((d) => (
+        <button key={d.id} className="backlink" title={d.title} onClick={(e) => onOpen(d.id, e.ctrlKey || e.metaKey)} onAuxClick={(e) => e.button === 1 && onOpen(d.id, true)}>
+          <EntityIcon icon={d.icon} color={d.color} size={16} fallback={<FileText size={14} />} />
+          <span>{d.title || t("untitled")}</span>
+        </button>
+      ))}
     </div>
   );
 }

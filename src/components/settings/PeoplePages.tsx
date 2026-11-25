@@ -14,6 +14,7 @@ import {
   resendInvite,
   setUserRole,
   suspendUser,
+  deleteUser,
   updateGroup,
   type Envelope,
   type GroupDetails,
@@ -38,6 +39,7 @@ export function UsersPage() {
   const [filter, setFilter] = useState<MemberFilter>("active");
   const [result, setResult] = useState<{ env: Envelope<Member[]>; users: Member[] } | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [deleting, setDeleting] = useState<Member | null>(null);
   const isAdmin = me.role === "admin";
 
   const load = async (offset: number) => {
@@ -122,6 +124,7 @@ export function UsersPage() {
                 : abilities("suspend") && u.id !== me.id
                   ? [{ label: t("suspend"), danger: true, onClick: () => void act(() => suspendUser(u.id), t("userSuspended", { name: u.name })) }]
                   : []),
+              ...(isAdmin && u.id !== me.id ? [{ label: t("deleteUser"), danger: true, onClick: () => setDeleting(u) }] : []),
             ];
             return (
               <div key={u.id} className={`settings-item${u.isSuspended ? " faded" : ""}`}>
@@ -151,6 +154,16 @@ export function UsersPage() {
             </button>
           )}
         </div>
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title={t("deleteUser")}
+          message={t("deleteUserMessage", { name: deleting.name })}
+          confirm={t("delete")}
+          danger
+          onClose={() => setDeleting(null)}
+          onConfirm={() => act(() => deleteUser(deleting.id), t("userDeleted", { name: deleting.name }))}
+        />
       )}
       {inviting && (
         <InviteDialog

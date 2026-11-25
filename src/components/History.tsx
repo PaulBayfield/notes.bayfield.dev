@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DOMSerializer, Node } from "prosemirror-model";
-import { listRevisions, listViews, resolveUrl, restoreRevision, revisionInfo, type Revision, type View } from "../lib/api";
+import { listRevisions, listViews, renameRevision, resolveUrl, restoreRevision, revisionInfo, type Revision, type View } from "../lib/api";
 import { useSettings } from "../lib/settings";
 import { onRealtime } from "../lib/realtime";
 import { schema } from "../editor/schema";
@@ -24,13 +24,40 @@ export function RenderedDoc({ data }: { data: unknown }) {
   return <div ref={ref} className="doc-content rendered-doc" />;
 }
 
-function RevisionDialog({ id, onRestore, onClose }: { id: string; onRestore: () => Promise<void>; onClose: () => void }) {
+function RevisionDialog({
+  id,
+  canUpdate,
+  onRestore,
+  onRenamed,
+  onClose,
+  onError,
+}: {
+  id: string;
+  canUpdate: boolean;
+  onRestore: () => Promise<void>;
+  onRenamed: () => void;
+  onClose: () => void;
+  onError: (e: unknown) => void;
+}) {
   const { t, f } = useSettings();
   const [revision, setRevision] = useState<Revision | null>(null);
   const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
   useEffect(() => {
-    void revisionInfo(id).then(setRevision);
+    void revisionInfo(id).then((r) => {
+      setRevision(r);
+      setName(r.name ?? "");
+    });
   }, [id]);
+  const saveName = async () => {
+    try {
+      await renameRevision(id, name.trim() || null);
+      setRevision((r) => r && { ...r, name: name.trim() || null });
+      onRenamed();
+    } catch (e) {
+      onError(e);
+    }
+  };
   return (
     <Dialog title={revision ? f.dateTime(revision.createdAt) : t("history")} onClose={onClose} wide>
       {revision ? (
@@ -42,12 +69,25 @@ function RevisionDialog({ id, onRestore, onClose }: { id: string; onRestore: () 
         <div className="skeleton-rows" />
       )}
       <div className="dialog-actions">
+        {canUpdate && revision && (
+          <form
+            className="revision-name"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveName();
+            }}
+          >
+            <input className="text-input" placeholder={t("versionName")} value={name} maxLength={255} onChange={(e) => setName(e.target.value)} />
+            {name.trim() !== (revision.name ?? "") && <button className="text-button">{t("save")}</button>}
+          </form>
+        )}
+        <span className="toolbar-spacer" />
         <button className="text-button" onClick={onClose}>
           {t("close")}
         </button>
         <button
           className="primary-button"
-          disabled={!revision || busy}
+          disabled={!revision || busy || !canUpdate}
           onClick={async () => {
             setBusy(true);
             try {
@@ -71,6 +111,7 @@ export function History({ documentId, canUpdate, onRestored, onError }: { docume
   const [revisions, setRevisions] = useState<Revision[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
+  const [reloadTick, setReloadTick] = useState(0);
   useEffect(() => {
     const load = () => listRevisions(documentId).then(setRevisions).catch(onError);
     void load();
@@ -84,7 +125,7 @@ export function History({ documentId, canUpdate, onRestored, onError }: { docume
       stop();
       clearTimeout(timer);
     };
-  }, [documentId, onError]);
+  }, [documentId, onError, reloadTick]);
 
   if (!revisions) return <div className="skeleton-rows" />;
   if (!revisions.length) return <p className="panel-note">{t("noHistory")}</p>;
@@ -97,13 +138,17 @@ export function History({ documentId, canUpdate, onRestored, onError }: { docume
             <span className="history-when" title={f.dateTime(r.createdAt)}>
               {i === 0 ? t("currentVersion") : f.relative(r.createdAt)}
             </span>
-            <span className="history-who">{r.name || (r.collaborators?.length ? r.collaborators.map((c) => c.name).join(", ") : r.createdBy.name)}</span>
+            {r.name && <span className="history-name">{r.name}</span>}
+            <span className="history-who">{(r.collaborators?.length ? r.collaborators.map((c) => c.name).join(", ") : r.createdBy.name)}</span>
           </span>
         </button>
       ))}
       {open && (
         <RevisionDialog
           id={open}
+          canUpdate={canUpdate}
+          onError={onError}
+          onRenamed={() => setReloadTick((n) => n + 1)}
           onClose={() => setOpen(null)}
           onRestore={async () => {
             if (!canUpdate) return;

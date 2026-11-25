@@ -6,12 +6,13 @@ import { APP_VERSION } from "../lib/updates";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
-import { BellIcon, Building, Info, Keyboard, LayoutTemplate, LinkIcon, Shield, Sliders, Smile, Upload, User as UserIcon, Users, X } from "./icons";
+import { Activity, AppWindow, BellIcon, Bot, Building, Info, KeyIcon, Keyboard, LayoutTemplate, LinkIcon, Plug, Shield, Sliders, Smile, Upload, User as UserIcon, Users, X } from "./icons";
 import { Loading, PageHeader, SettingsPageContext, type SettingsContextValue } from "./settings/common";
 import { AboutPage, NotificationsPage, PreferencesPage, ProfilePage } from "./settings/AccountPages";
 import { DetailsPage, ExportPage, SecurityPage } from "./settings/WorkspacePages";
 import { GroupsPage, UsersPage } from "./settings/PeoplePages";
 import { EmojisPage, SharesPage, TemplatesPage } from "./settings/ContentPages";
+import { ApiKeysPage, ApplicationsPage, AuditLogPage, ConnectedAppsPage, McpPage } from "./settings/IntegrationPages";
 
 export const SHORTCUTS: { keys: string[]; label: StringKey }[] = [
   { keys: [`${mod}+K`], label: "scSearch" },
@@ -53,7 +54,25 @@ export function ShortcutList() {
   );
 }
 
-export type SettingsPage = "profile" | "preferences" | "notifications" | "shortcuts" | "details" | "security" | "users" | "groups" | "templates" | "emojis" | "shares" | "export" | "about";
+export type SettingsPage =
+  | "profile"
+  | "preferences"
+  | "notifications"
+  | "shortcuts"
+  | "apiKeys"
+  | "connectedApps"
+  | "mcp"
+  | "details"
+  | "security"
+  | "users"
+  | "groups"
+  | "templates"
+  | "emojis"
+  | "shares"
+  | "applications"
+  | "audit"
+  | "export"
+  | "about";
 
 interface NavItem {
   id: SettingsPage;
@@ -74,6 +93,9 @@ const ACCOUNT: NavItem[] = [
     icon: <Keyboard />,
     page: () => <ShortcutsPage />,
   },
+  { id: "mcp", label: "mcp", icon: <Bot />, page: () => <McpPage /> },
+  { id: "apiKeys", label: "apiKeys", icon: <KeyIcon />, visible: (can) => can("createApiKey") || can("listApiKeys"), page: () => <ApiKeysPage /> },
+  { id: "connectedApps", label: "connectedApps", icon: <Plug />, page: () => <ConnectedAppsPage /> },
   { id: "about", label: "about", icon: <Info />, page: () => <AboutPage /> },
 ];
 
@@ -86,6 +108,8 @@ const WORKSPACE: NavItem[] = [
   { id: "templates", label: "templates", icon: <LayoutTemplate />, visible: (can) => can("readTemplate"), page: () => <TemplatesPage /> },
   { id: "emojis", label: "emojis", icon: <Smile />, visible: (can) => can("update"), page: () => <EmojisPage /> },
   { id: "shares", label: "sharedLinks", icon: <LinkIcon />, visible: (can) => can("listShares"), page: () => <SharesPage /> },
+  { id: "applications", label: "applications", icon: <AppWindow />, visible: (can) => can("listOAuthClients"), page: () => <ApplicationsPage /> },
+  { id: "audit", label: "auditLog", icon: <Activity />, visible: (_can, me) => me.role === "admin", page: () => <AuditLogPage /> },
   { id: "export", label: "exportTitle", icon: <Upload />, visible: (can) => can("createExport"), page: () => <ExportPage /> },
 ];
 
@@ -171,8 +195,9 @@ export function SettingsDialog(p: Props) {
 
   const teamCan = (ability: string) => !!auth && can(auth.policies, auth.team.id, ability);
   const me = auth?.me ?? p.user;
+  const accountItems = ACCOUNT.filter((i) => !i.visible || (auth && i.visible(teamCan, me)));
   const workspaceItems = auth ? WORKSPACE.filter((i) => !i.visible || i.visible(teamCan, me)) : [];
-  const current = [...ACCOUNT, ...workspaceItems].find((i) => i.id === page) ?? ACCOUNT[1];
+  const current = [...accountItems, ...workspaceItems].find((i) => i.id === page) ?? ACCOUNT[1];
 
   const nav = (items: NavItem[]) =>
     items.map((i) => (
@@ -187,7 +212,7 @@ export function SettingsDialog(p: Props) {
       <div className="settings-modal" role="dialog" aria-label={t("settings")}>
         <nav className="settings-nav">
           <div className="settings-nav-label">{t("account")}</div>
-          {nav(ACCOUNT)}
+          {nav(accountItems)}
           {workspaceItems.length > 0 && (
             <>
               <div className="settings-nav-label">{auth?.team.name ?? t("workspace")}</div>

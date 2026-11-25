@@ -236,11 +236,25 @@ export const star = (documentId: string) => call<Star>("stars.create", { documen
 
 export const unstar = (id: string) => call("stars.delete", { id });
 
+/** Moves a starred item (a fractional index among the others, as Outline). */
+export const moveStar = (id: string, index: string) => call<Star>("stars.update", { id, index }).then((r) => r.data);
+
+/** The documents linking to this one (Outline's backlinks). */
+export const backlinks = (documentId: string) =>
+  call<Doc[]>("documents.list", { backlinkDocumentId: documentId, limit: 50, sort: "updatedAt", direction: "DESC" }).then((r) => r.data);
+
 export const searchTitles = (query: string, limit = 8) =>
   call<Doc[]>("documents.search_titles", { query, limit }).then((r) => r.data);
 
-export const search = (query: string, limit = 12) =>
-  call<SearchHit[]>("documents.search", { query, limit }).then((r) => r.data);
+export interface SearchOptions {
+  collectionId?: string;
+  /** Updated in the last day, week, month or year. */
+  dateFilter?: "day" | "week" | "month" | "year";
+  statusFilter?: ("published" | "draft" | "archived")[];
+}
+
+export const search = (query: string, limit = 12, options: SearchOptions = {}) =>
+  call<SearchHit[]>("documents.search", { query, limit, ...options }).then((r) => r.data);
 
 export const createDocument = (input: { title?: string; collectionId?: string | null; parentDocumentId?: string | null }) =>
   call<Doc>("documents.create", { title: "", publish: true, ...input }).then((r) => r.data);
@@ -403,7 +417,12 @@ export interface Comment {
   updatedAt: string;
   resolvedAt: string | null;
   resolvedBy: User | null;
+  /** Who reacted with what (Outline's comment reactions). */
+  reactions?: { emoji: string; userIds: string[] }[];
 }
+
+export const addReaction = (id: string, emoji: string) => call("comments.add_reaction", { id, emoji });
+export const removeReaction = (id: string, emoji: string) => call("comments.remove_reaction", { id, emoji });
 
 export async function listComments(documentId: string): Promise<Comment[]> {
   const out: Comment[] = [];
@@ -452,6 +471,33 @@ export const createCollection = (input: { name: string; icon?: string | null; co
 
 export const updateCollection = (id: string, patch: { name?: string; icon?: string | null; color?: string | null; permission?: CollectionPermission; data?: RichText }) =>
   call<CollectionDetails>("collections.update", { id, ...patch }).then((r) => r.data);
+
+export interface CollectionMembership {
+  id: string;
+  userId: string;
+  collectionId: string;
+  permission: DocumentPermission;
+}
+
+export interface CollectionGroupMembership {
+  id: string;
+  groupId: string;
+  collectionId: string;
+  permission: DocumentPermission;
+}
+
+/** People added to a collection (Outline's collection members). */
+export const collectionMemberships = (id: string) =>
+  call<{ memberships: CollectionMembership[]; users: User[] }>("collections.memberships", { id, limit: 100 }).then((r) => r.data);
+export const addCollectionUser = (id: string, userId: string, permission: DocumentPermission) => call("collections.add_user", { id, userId, permission });
+export const removeCollectionUser = (id: string, userId: string) => call("collections.remove_user", { id, userId });
+export const collectionGroupMemberships = (id: string) =>
+  call<{ groupMemberships: CollectionGroupMembership[]; groups: Group[] }>("collections.group_memberships", { id, limit: 100 }).then((r) => r.data);
+export const addCollectionGroup = (id: string, groupId: string, permission: DocumentPermission) => call("collections.add_group", { id, groupId, permission });
+export const removeCollectionGroup = (id: string, groupId: string) => call("collections.remove_group", { id, groupId });
+export const listArchivedCollections = () => call<Collection[]>("collections.list", { statusFilter: ["archived"], limit: 100 }).then((r) => r.data);
+
+export const restoreCollection = (id: string) => call<Collection>("collections.restore", { id }).then((r) => r.data);
 
 export const moveCollection = (id: string, index: string) => call<Collection>("collections.move", { id, index }).then((r) => r.data);
 
@@ -603,6 +649,9 @@ export interface Pin {
   index: string;
 }
 
+/** Moves a pinned document among the others (a fractional index, as Outline). */
+export const movePin = (id: string, index: string) => call<Pin>("pins.update", { id, index }).then((r) => r.data);
+
 export const listPins = (collectionId?: string) =>
   call<{ pins: Pin[]; documents: Doc[] }>("pins.list", { collectionId: collectionId ?? null, limit: 50 }).then((r) => r.data);
 
@@ -620,6 +669,9 @@ export interface Revision {
   collaborators?: User[];
   name?: string | null;
 }
+
+/** Names a version ("Before the redesign"), or clears its name. */
+export const renameRevision = (id: string, name: string | null) => call<Revision>("revisions.update", { id, name }).then((r) => r.data);
 
 export const listRevisions = (documentId: string) => call<Revision[]>("revisions.list", { documentId, limit: 50 }).then((r) => r.data);
 
@@ -776,6 +828,8 @@ export interface Share {
   url: string;
   includeChildDocuments: boolean;
   allowIndexing: boolean;
+  showLastUpdated?: boolean;
+  showTOC?: boolean;
   sourceTitle?: string;
   views?: number;
 }
@@ -792,7 +846,18 @@ export async function shareInfo(documentId: string): Promise<Share[]> {
 
 export const createShare = (documentId: string) => call<Share>("shares.create", { documentId, published: true }).then((r) => r.data);
 
-export const updateShare = (id: string, patch: { published?: boolean; includeChildDocuments?: boolean; allowIndexing?: boolean }) =>
+/** A whole collection's public link (Outline's collection sharing). */
+export async function collectionShareInfo(collectionId: string): Promise<Share | null> {
+  const res = await call<{ shares: Share[] } | undefined>("shares.info", { collectionId }).catch((e) => {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  });
+  return res?.data?.shares?.[0] ?? null;
+}
+
+export const createCollectionShare = (collectionId: string) => call<Share>("shares.create", { collectionId, published: true }).then((r) => r.data);
+
+export const updateShare = (id: string, patch: { published?: boolean; includeChildDocuments?: boolean; allowIndexing?: boolean; showLastUpdated?: boolean; showTOC?: boolean }) =>
   call<Share>("shares.update", { id, ...patch }).then((r) => r.data);
 
 export const revokeShare = (id: string) => call("shares.revoke", { id });
@@ -877,6 +942,9 @@ export const listMembers = (query: string, filter: MemberFilter, offset = 0, lim
   call<Member[]>("users.list", { query: query || undefined, filter, offset, limit, sort: "name", direction: "ASC" });
 
 export const setUserRole = (id: string, role: UserRole) => call<Member>("users.update_role", { id, role }).then((r) => r.data);
+
+/** Deletes an account (one's own, or anyone's for an admin). */
+export const deleteUser = (id?: string) => call("users.delete", id ? { id } : {});
 
 export const suspendUser = (id: string) => call<Member>("users.suspend", { id }).then((r) => r.data);
 

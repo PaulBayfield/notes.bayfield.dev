@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { deleteDocument, destroyDocument, emptyTrash, listArchived, listDeleted, listDrafts, restoreDocument, type Doc } from "../lib/api";
+import { deleteDocument, destroyDocument, emptyTrash, listArchived, listArchivedCollections, listDeleted, listDrafts, restoreCollection, restoreDocument, type Collection, type Doc } from "../lib/api";
 import { onRealtime } from "../lib/realtime";
 import type { ListPage, Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
@@ -9,6 +9,8 @@ import { EntityIcon } from "./EntityIcon";
 import { Archive, FileText, Pencil, Restore, Trash } from "./icons";
 
 const LOADERS: Record<ListPage, () => Promise<Doc[]>> = { drafts: listDrafts, archive: listArchived, trash: listDeleted };
+/** Documents in the trash are deleted for good after this many days (the server's housekeeping). */
+const TRASH_DAYS = 30;
 
 /** Drafts, archived or deleted documents. */
 export function DocListPage({
@@ -26,9 +28,15 @@ export function DocListPage({
 }) {
   const { t, f } = useSettings();
   const [docs, setDocs] = useState<Doc[] | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [confirm, setConfirm] = useState<{ kind: "destroy" | "trash"; doc: Doc } | { kind: "empty" } | null>(null);
 
   const load = useCallback(() => {
+    if (page === "archive")
+      listArchivedCollections()
+        .then(setCollections)
+        .catch(() => setCollections([]));
+    else setCollections([]);
     LOADERS[page]()
       .then(setDocs)
       .catch((e) => {
@@ -61,6 +69,16 @@ export function DocListPage({
       })
       .catch(onError);
 
+  const restoreCol = (c: Collection) =>
+    restoreCollection(c.id)
+      .then(() => {
+        flash(t("restoredCollection", { name: c.name }));
+        load();
+        void workspace.refresh();
+      })
+      .catch(onError);
+  const daysLeft = (deletedAt: string) => Math.max(0, Math.ceil(TRASH_DAYS - (Date.now() - new Date(deletedAt).getTime()) / 86_400_000));
+
   const title = t(page === "drafts" ? "drafts" : page === "archive" ? "archiveTitle" : "trash");
   const empty = t(page === "drafts" ? "noDrafts" : page === "archive" ? "noArchived" : "noDeleted");
   const PageIcon = page === "drafts" ? Pencil : page === "archive" ? Archive : Trash;
@@ -83,7 +101,26 @@ export function DocListPage({
             </button>
           )}
         </header>
+        {collections.length > 0 && (
+          <section className="home-section">
+            <h2>{t("collections")}</h2>
+            {collections.map((c) => (
+              <div key={c.id} className="doc-row list-row">
+                <span className="list-row-main static">
+                  <span className="doc-row-icon">
+                    <EntityIcon icon={c.icon} color={c.color} size={20} fallback={<Archive size={16} />} />
+                  </span>
+                  <span className="doc-row-title">{c.name}</span>
+                </span>
+                <button className="icon-button small" title={t("restore")} onClick={() => void restoreCol(c)}>
+                  <Restore size={14} />
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
         <section className="home-section">
+          {collections.length > 0 && <h2>{t("documents")}</h2>}
           {docs === null ? (
             <div className="skeleton-rows" />
           ) : docs.length === 0 ? (
@@ -100,7 +137,13 @@ export function DocListPage({
                     </span>
                     <span className="doc-row-title">{d.title || t("untitled")}</span>
                     {collection && <span className="doc-row-collection">{collection.name}</span>}
-                    {when && <span className="doc-row-time" title={f.dateTime(when)}>{f.relative(when)}</span>}
+                    {page === "trash" && d.deletedAt ? (
+                      <span className="doc-row-time" title={f.dateTime(d.deletedAt)}>
+                        {t("deletedInDays", { n: daysLeft(d.deletedAt) })}
+                      </span>
+                    ) : (
+                      when && <span className="doc-row-time" title={f.dateTime(when)}>{f.relative(when)}</span>
+                    )}
                   </button>
                   {page !== "drafts" && (
                     <button className="icon-button small" title={t("restore")} onClick={() => void restore(d)}>

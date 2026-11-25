@@ -347,6 +347,26 @@ export function SharePanel({ documentId, collection, me, canInvite, canShare, on
                   onChange={(e) => void act(() => updateShare(own.id, { allowIndexing: e.target.checked }))}
                 />
               </label>
+              <label className="share-option">
+                <span>{t("showLastUpdated")}</span>
+                <input
+                  type="checkbox"
+                  className="switch"
+                  checked={!!own.showLastUpdated}
+                  disabled={busy}
+                  onChange={(e) => void act(() => updateShare(own.id, { showLastUpdated: e.target.checked }))}
+                />
+              </label>
+              <label className="share-option">
+                <span>{t("showToc")}</span>
+                <input
+                  type="checkbox"
+                  className="switch"
+                  checked={!!own.showTOC}
+                  disabled={busy}
+                  onChange={(e) => void act(() => updateShare(own.id, { showTOC: e.target.checked }))}
+                />
+              </label>
             </>
           )}
         </>

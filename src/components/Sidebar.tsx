@@ -51,6 +51,8 @@ interface Props {
   onContextMenu: (target: DocTarget, e: MouseEvent) => void;
   onMove: (id: string, target: DropTarget) => void;
   onMoveCollection: (id: string, index: string) => void;
+  /** A starred item was dragged to a new place among the starred ones. */
+  onMoveStar: (id: string, index: string) => void;
   onNewCollection: () => void;
   team: Team;
   /** The workspace name was clicked. */
@@ -98,6 +100,9 @@ export function Sidebar(p: Props) {
     update((s) => ({ expanded: s.expanded.includes(key) ? s.expanded.filter((k) => k !== key) : [...s.expanded, key] }));
   const isActive = (id: string) => p.activeDocId === id || (p.route.name === "doc" && p.route.id === id);
 
+  // Starred items reorder among themselves (Outline's stars.update), apart from the tree's drag and drop.
+  const [starDrag, setStarDrag] = useState<string | null>(null);
+  const [starDrop, setStarDrop] = useState<{ id: string; zone: "before" | "after" } | null>(null);
   const [drag, setDrag] = useState<Dragged | null>(null);
   const [drop, setDrop] = useState<DropTarget | CollectionDrop | null>(null);
   const allowed = (target: DropTarget | CollectionDrop) => {
@@ -280,8 +285,45 @@ export function Sidebar(p: Props) {
                 ) : (
                   <span className="tree-chevron-space" />
                 );
+                const dropClass = starDrop?.id === s.star.id && starDrag !== s.star.id ? ` star-drop-${starDrop.zone}` : "";
                 return (
-                  <div key={s.star.id} role="treeitem" aria-expanded={children.length ? open : undefined}>
+                  <div
+                    key={s.star.id}
+                    role="treeitem"
+                    aria-expanded={children.length ? open : undefined}
+                    className={`starred-item${dropClass}${starDrag === s.star.id ? " dragging" : ""}`}
+                    draggable
+                    onDragStart={(e) => {
+                      e.stopPropagation();
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", s.star.id);
+                      setStarDrag(s.star.id);
+                    }}
+                    onDragOver={(e) => {
+                      if (!starDrag) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const zone = e.clientY < rect.top + Math.min(rect.height, 30) / 2 ? "before" : "after";
+                      if (starDrop?.id !== s.star.id || starDrop.zone !== zone) setStarDrop({ id: s.star.id, zone });
+                    }}
+                    onDrop={(e) => {
+                      if (!starDrag || !starDrop) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const list = starred.filter((x) => x.star.id !== starDrag);
+                      const at = list.findIndex((x) => x.star.id === starDrop.id);
+                      const before = starDrop.zone === "before" ? list[at - 1] : list[at];
+                      const after = starDrop.zone === "before" ? list[at] : list[at + 1];
+                      if (starDrop.id !== starDrag) p.onMoveStar(starDrag, fractionalIndex(before?.star.index ?? null, after?.star.index ?? null));
+                      setStarDrag(null);
+                      setStarDrop(null);
+                    }}
+                    onDragEnd={() => {
+                      setStarDrag(null);
+                      setStarDrop(null);
+                    }}
+                  >
                     {s.kind === "collection" ? (
                       <div
                         className={`tree-row${p.route.name === "collection" && p.route.id === s.collection.id ? " active" : ""}`}

@@ -4,7 +4,7 @@
 //  - Web: the app is served on Outline's origin and uses the browser's Outline session.
 
 import { invoke } from "@tauri-apps/api/core";
-import { AuthError, authInfo, ensureCsrfCookie, setServer, type AuthInfo } from "./api";
+import { AuthError, authInfo, call, ensureCsrfCookie, setServer, type AuthInfo } from "./api";
 import { isTauri } from "./platform";
 
 export interface Session extends AuthInfo {
@@ -89,5 +89,9 @@ export async function signIn(server: string, provider: Provider, viaBrowser = fa
 
 export async function signOut(): Promise<void> {
   if (isTauri) await invoke("sign_out");
-  else location.href = "/";
+  else {
+    // Ends the session on the server (it clears the cookie), then back to the sign-in page.
+    await call("auth.delete").catch(() => {});
+    location.href = "/";
+  }
 }

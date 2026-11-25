@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { recentlyViewed, search, searchTitles, type Doc } from "../lib/api";
+import { recentlyViewed, search, searchTitles, type Doc, type SearchOptions } from "../lib/api";
+import { deleteSearch, listSearches, type RecentSearch } from "../lib/integrations";
 import { useSettings } from "../lib/settings";
 import type { Workspace } from "../lib/workspace";
 import { EntityIcon } from "./EntityIcon";
-import { FileText, Search } from "./icons";
+import { Clock, FileText, Search, X } from "./icons";
 
 interface Result {
   key: string;
@@ -27,11 +28,23 @@ export function SearchDialog({ workspace, onPick, onClose }: { workspace: Worksp
   const [recent, setRecent] = useState<Doc[]>([]);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState(0);
+  const [searches, setSearches] = useState<RecentSearch[]>([]);
+  const [collectionId, setCollectionId] = useState("");
+  const [dateFilter, setDateFilter] = useState<SearchOptions["dateFilter"] | "">("");
+  const [archived, setArchived] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const filtered = !!(collectionId || dateFilter || archived);
 
   useEffect(() => {
     recentlyViewed(8).then(setRecent).catch(() => {});
+    listSearches(5).then(setSearches).catch(() => {});
   }, []);
+
+  const forget = (q: string) => {
+    setSearches((list) => list.filter((x) => x.query !== q));
+    void deleteSearch(q).catch(() => {});
+  };
 
   useEffect(() => {
     const q = query.trim();
@@ -42,13 +55,20 @@ export function SearchDialog({ workspace, onPick, onClose }: { workspace: Worksp
     }
     let cancelled = false;
     setBusy(true);
+    // With filters, only the full-text search applies them (titles match everything).
     const quick = setTimeout(() => {
+      if (filtered) return setTitles([]);
       searchTitles(q, 6)
         .then((r) => !cancelled && setTitles(r))
         .catch(() => {});
     }, 80);
+    const options: SearchOptions = {
+      collectionId: collectionId || undefined,
+      dateFilter: dateFilter || undefined,
+      statusFilter: archived ? ["published", "archived"] : undefined,
+    };
     const full = setTimeout(() => {
-      search(q, 12)
+      search(q, filtered ? 25 : 12, options)
         .then((r) => !cancelled && setHits(r.map((h) => ({ key: `c${h.document.id}`, doc: h.document, context: h.context }))))
         .catch(() => {})
         .finally(() => !cancelled && setBusy(false));
@@ -58,7 +78,7 @@ export function SearchDialog({ workspace, onPick, onClose }: { workspace: Worksp
       clearTimeout(quick);
       clearTimeout(full);
     };
-  }, [query]);
+  }, [query, collectionId, dateFilter, archived, filtered]);
 
   const sections = useMemo(() => {
     if (!query.trim()) return [{ title: t("recentlyViewed"), items: recent.map((d) => ({ key: `r${d.id}`, doc: d }) as Result) }];
@@ -90,10 +110,57 @@ export function SearchDialog({ workspace, onPick, onClose }: { workspace: Worksp
       <div className="search-dialog" role="dialog" aria-label={t("search")}>
         <div className="search-input-row">
           <Search size={18} />
-          <input autoFocus placeholder={t("searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKeyDown} />
+          <input ref={inputRef} autoFocus placeholder={t("searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKeyDown} />
           {busy && <span className="spinner" />}
         </div>
+        <div className="search-filters">
+          <select value={collectionId} onChange={(e) => setCollectionId(e.target.value)} aria-label={t("collection")}>
+            <option value="">{t("allCollections")}</option>
+            {workspace.collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as typeof dateFilter)} aria-label={t("updated")}>
+            <option value="">{t("anyTime")}</option>
+            <option value="day">{t("pastDay")}</option>
+            <option value="week">{t("pastWeek")}</option>
+            <option value="month">{t("pastMonth")}</option>
+            <option value="year">{t("pastYear")}</option>
+          </select>
+          <label className="search-filter-check">
+            <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+            {t("includeArchived")}
+          </label>
+        </div>
         <div className="search-results" ref={listRef}>
+          {!query.trim() && searches.length > 0 && (
+            <div>
+              <div className="search-section">{t("recentSearches")}</div>
+              {searches.map((r) => (
+                <div key={r.id} className="search-result recent-search">
+                  <button
+                    className="recent-search-pick"
+                    onClick={() => {
+                      setQuery(r.query);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    <span className="search-result-icon">
+                      <Clock size={16} />
+                    </span>
+                    <span className="search-result-text">
+                      <span className="search-result-title">{r.query}</span>
+                    </span>
+                  </button>
+                  <button className="icon-button small" title={t("remove")} aria-label={t("remove")} onClick={() => forget(r.query)}>
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {sections.map((s) => (
             <div key={s.title}>
               <div className="search-section">{s.title}</div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, chooseAndUploadImage, installationInfo, setNotification, updateMe, type InstallationInfo } from "../../lib/api";
+import { ApiError, chooseAndUploadImage, deleteUser, installationInfo, setNotification, updateMe, type InstallationInfo } from "../../lib/api";
 import { getAutostart, setAutostart } from "../../lib/desktop";
 import { SYSTEM_SPELLING } from "../../editor/spelling";
 import type { StringKey } from "../../lib/i18n";
@@ -7,6 +7,7 @@ import { isTauri, openExternal } from "../../lib/platform";
 import { APP_VERSION, canInstallUpdates, installStatus, RELEASES_URL, useInstallUpdate, useUpdateCheck } from "../../lib/updates";
 import { useSettings, type Settings, type Theme } from "../../lib/settings";
 import { Avatar } from "../Avatar";
+import { ConfirmDialog } from "../Dialogs";
 import type { BadgeStyle } from "../NotificationsButton";
 import { PageHeader, Row, Select, Switch, usePage } from "./common";
 import { connectPrefs, disconnectPrefs, usePrefsStatus, activeCustomTheme, BASE_COLORS, PREFS_URL } from "../../lib/prefs";
@@ -14,8 +15,9 @@ import { External } from "../icons";
 
 export function ProfilePage() {
   const { t } = useSettings();
-  const { me, setMe, flash, onError, server, onSignOut } = usePage();
+  const { me, team, setMe, flash, onError, server, onSignOut } = usePage();
   const [name, setName] = useState(me.name);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const save = async (patch: Parameters<typeof updateMe>[0], message: string) => {
@@ -81,7 +83,31 @@ export function ProfilePage() {
             {t("signOut")}
           </button>
         </Row>
+        {(me.role === "admin" || team.preferences?.membersCanDeleteAccount !== false) && (
+          <Row label={t("deleteAccount")} hint={t("deleteAccountHint")}>
+            <button className="text-button danger" onClick={() => setDeletingAccount(true)}>
+              {t("deleteAccountButton")}
+            </button>
+          </Row>
+        )}
       </section>
+      {deletingAccount && (
+        <ConfirmDialog
+          title={t("deleteAccount")}
+          message={t("deleteAccountMessage", { name: team.name })}
+          confirm={t("deleteAccountButton")}
+          danger
+          onClose={() => setDeletingAccount(false)}
+          onConfirm={async () => {
+            try {
+              await deleteUser();
+              onSignOut();
+            } catch (e) {
+              onError(e);
+            }
+          }}
+        />
+      )}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { EditorView } from "prosemirror-view";
-import { AuthError, createDocument, type Team, moveCollection, moveDocument, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
+import { AuthError, createDocument, type Team, moveCollection, moveDocument, moveStar, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isMac, isTauri, openExternal } from "./lib/platform";
 import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
@@ -779,6 +779,7 @@ function NotesApp({
           onContextMenu={openContextMenu}
           onMove={(id, target) => void moveDoc(id, target)}
           onMoveCollection={(id, index) => void reorderCollection(id, index)}
+          onMoveStar={(id, index) => void moveStar(id, index).then(workspace.refreshStars, onError)}
           onNewCollection={actions.newCollection}
           team={session.team}
           onOpenWorkspace={() => setWorkspacesOpen(true)}
@@ -927,6 +928,7 @@ function NotesApp({
             setReloadKey((n) => n + 1);
             flash(t("restored"));
           }}
+          onOpenDoc={(id, newTab) => go({ name: "doc", id }, newTab)}
         />
       )}
       {activeComment && <style>{`.doc-content .comment-marker[data-comment-id="${CSS.escape(activeComment)}"] { background: color-mix(in srgb, var(--warning) 35%, transparent); }`}</style>}

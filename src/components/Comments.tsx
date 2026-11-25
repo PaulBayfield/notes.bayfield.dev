@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { EditorView } from "prosemirror-view";
 import {
+  addReaction,
+  removeReaction,
   createComment,
   deleteComment,
   listComments,
@@ -14,6 +16,9 @@ import {
 import { onRealtime } from "../lib/realtime";
 import { useSettings } from "../lib/settings";
 import { Avatar } from "./Avatar";
+import { EmojiGrid } from "./EmojiPicker";
+import { Smile } from "./icons";
+import { useDismiss } from "./Toolbar";
 import { commentOrder, commentQuote, removeCommentMark, scrollToComment, updateCommentMark } from "../editor/comments";
 
 let draftCleanup: ReturnType<typeof setTimeout> | undefined;
@@ -97,7 +102,76 @@ function Composer({
   );
 }
 
-function CommentItem({ comment, user, onEdit, onDelete }: { comment: Comment; user: User; onEdit: (text: string) => Promise<void>; onDelete: () => void }) {
+const QUICK_REACTIONS = ["👍", "❤️", "😄", "🎉", "👀", "🙏"];
+
+/** The reactions under a comment, and adding one. */
+function Reactions({ comment, user, onToggle }: { comment: Comment; user: User; onToggle: (emoji: string, mine: boolean) => void }) {
+  const { t } = useSettings();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useDismiss(open, () => setOpen(false));
+  const reactions = comment.reactions ?? [];
+  return (
+    <div className="comment-reactions">
+      {reactions.map((r) => {
+        const mine = r.userIds.includes(user.id);
+        return (
+          <button key={r.emoji} className={`reaction${mine ? " mine" : ""}`} aria-pressed={mine} onClick={() => onToggle(r.emoji, mine)}>
+            <span>{r.emoji}</span>
+            <span className="reaction-count">{r.userIds.length}</span>
+          </button>
+        );
+      })}
+      <div className="menu-anchor" ref={ref}>
+        <button className="reaction add" title={t("addReaction")} aria-label={t("addReaction")} onClick={() => setOpen(!open)}>
+          <Smile size={13} />
+        </button>
+        {open && (
+          <div className="menu reaction-picker">
+            <div className="reaction-quick">
+              {QUICK_REACTIONS.map((e) => (
+                <button
+                  key={e}
+                  onClick={() => {
+                    setOpen(false);
+                    onToggle(e, !!reactions.find((r) => r.emoji === e)?.userIds.includes(user.id));
+                  }}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+            <input className="text-input" placeholder={t("searchEmoji")} value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div className="reaction-grid">
+              <EmojiGrid
+                query={query}
+                onPick={(e) => {
+                  if (!e) return;
+                  setOpen(false);
+                  onToggle(e.native, !!reactions.find((r) => r.emoji === e.native)?.userIds.includes(user.id));
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommentItem({
+  comment,
+  user,
+  onEdit,
+  onDelete,
+  onReact,
+}: {
+  comment: Comment;
+  user: User;
+  onEdit: (text: string) => Promise<void>;
+  onDelete: () => void;
+  onReact: (emoji: string, remove: boolean) => void;
+}) {
   const { t, f } = useSettings();
   const [editing, setEditing] = useState(false);
   const mine = comment.createdBy.id === user.id;
@@ -135,6 +209,7 @@ function CommentItem({ comment, user, onEdit, onDelete }: { comment: Comment; us
       ) : (
         <div className="comment-body">{text}</div>
       )}
+      {!editing && <Reactions comment={comment} user={user} onToggle={onReact} />}
     </div>
   );
 }
@@ -238,6 +313,23 @@ export function Comments(p: Props) {
             onEdit={async (text) => {
               await updateComment(item.id, text);
               await load();
+            }}
+            onReact={(emoji, remove) => {
+              // Shown right away, then confirmed by the server.
+              setComments((list) =>
+                list?.map((x) => {
+                  if (x.id !== item.id) return x;
+                  const list = x.reactions ?? [];
+                  const current = list.find((r) => r.emoji === emoji)?.userIds ?? [];
+                  const userIds = remove ? current.filter((u) => u !== p.user.id) : [...new Set([...current, p.user.id])];
+                  const reactions = current.length ? list.map((r) => (r.emoji === emoji ? { emoji, userIds } : r)) : [...list, { emoji, userIds }];
+                  return { ...x, reactions: reactions.filter((r) => r.userIds.length) };
+                }) ?? null,
+              );
+              void (remove ? removeReaction(item.id, emoji) : addReaction(item.id, emoji)).then(load, (e) => {
+                p.onError(e);
+                void load();
+              });
             }}
             onDelete={act(async () => {
               await deleteComment(item.id);

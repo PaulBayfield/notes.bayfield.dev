@@ -42,6 +42,7 @@ import { CollectionDialog } from "./CollectionDialog";
 import { ExportDialog } from "./ExportDialog";
 import { PdfExportDialog } from "./PdfExport";
 import { ConfirmDialog, Dialog as Modal, MoveDialog } from "./Dialogs";
+import { CollectionAccessPanel } from "./CollectionAccess";
 import { SharePanel } from "./ShareButton";
 import type { DocMeta } from "./DocumentView";
 import type { PanelTab } from "./Panel";
@@ -74,6 +75,7 @@ import {
   Star,
   Trash,
   Upload,
+  ShareIcon,
 } from "./icons";
 
 interface Params {
@@ -98,6 +100,7 @@ type Dialog =
   | { kind: "collection"; collection?: Collection }
   | { kind: "deleteCollection"; collection: Collection }
   | { kind: "exportCollection"; collection: Collection }
+  | { kind: "collectionAccess"; collection: Collection }
   | { kind: "present" }
   /** `selection`: the editor's, when the menu was opened (to export only that). */
   | { kind: "pdf"; selection: Selection }
@@ -402,6 +405,7 @@ export function useDocumentActions(p: Params) {
     menu([
       { label: t("newDoc"), icon: <FilePlus size={15} />, onClick: () => void p.newDoc(c.id) },
       { label: t("editCollection"), icon: <Pencil size={15} />, onClick: () => setDialog({ kind: "collection", collection: c }) },
+      { label: t("shareEllipsis"), icon: <ShareIcon size={15} />, onClick: () => setDialog({ kind: "collectionAccess", collection: c }) },
       {
         label: t(isCollectionStarred(c.id) ? "unstar" : "star"),
         icon: <Star size={15} filled={!!isCollectionStarred(c.id)} />,
@@ -491,6 +495,12 @@ export function useDocumentActions(p: Params) {
           }
         }}
       />
+    );
+  else if (dialog?.kind === "collectionAccess")
+    overlay = (
+      <Modal title={t("shareCollection", { name: dialog.collection.name })} onClose={close}>
+        <CollectionAccessPanel collection={dialog.collection} me={p.me} onChanged={() => void workspace.refresh()} onError={onError} flash={flash} />
+      </Modal>
     );
   else if (dialog?.kind === "exportCollection")
     overlay = <ExportDialog collection={dialog.collection} onClose={close} flash={flash} onError={onError} />;

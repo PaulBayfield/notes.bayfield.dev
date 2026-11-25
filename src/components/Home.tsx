@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Node } from "prosemirror-model";
-import { can, collectionDetails, listPins, recentlyUpdated, recentlyViewed, updateCollection, type Doc, type NavNode, type RichText, type User } from "../lib/api";
+import fractionalIndex from "fractional-index";
+import { can, collectionDetails, listPins, movePin, recentlyUpdated, recentlyViewed, updateCollection, type Doc, type NavNode, type Pin, type RichText, type User } from "../lib/api";
 import type { Route } from "../lib/router";
 import { useSettings } from "../lib/settings";
 import { onRealtime } from "../lib/realtime";
@@ -27,32 +28,82 @@ function DocRow({ doc, workspace, onOpen }: { doc: Pick<Doc, "id" | "title" | "i
 /** Pinned documents, as cards. */
 function Pinned({ collectionId, onNavigate, onError }: { collectionId?: string; onNavigate: (r: Route) => void; onError: (e: unknown) => void }) {
   const { t } = useSettings();
-  const [docs, setDocs] = useState<Doc[]>([]);
-  useEffect(() => {
-    const load = () =>
+  const [items, setItems] = useState<{ pin: Pin; doc: Doc }[]>([]);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<{ id: string; side: "before" | "after" } | null>(null);
+  const load = useCallback(
+    () =>
       listPins(collectionId)
         .then(({ pins, documents }) =>
-          setDocs(
+          setItems(
             pins
               .slice()
               .sort((a, b) => (a.index < b.index ? -1 : 1))
-              .map((p) => documents.find((d) => d.id === p.documentId))
-              .filter((d): d is Doc => !!d),
+              .map((pin) => ({ pin, doc: documents.find((d) => d.id === pin.documentId)! }))
+              .filter((x) => x.doc),
           ),
         )
-        .catch(onError);
+        .catch(onError),
+    [collectionId, onError],
+  );
+  useEffect(() => {
     void load();
     return onRealtime(({ event }) => event.startsWith("pins.") && void load());
-  }, [collectionId, onError]);
-  if (!docs.length) return null;
+  }, [load]);
+  if (!items.length) return null;
+  const docs = items.map((x) => x.doc);
+
+  /** Drops the dragged card next to another one. */
+  const dropOn = (targetId: string, side: "before" | "after") => {
+    const moving = items.find((x) => x.pin.id === dragging);
+    if (!moving || targetId === moving.pin.id) return;
+    const rest = items.filter((x) => x.pin.id !== moving.pin.id);
+    const at = rest.findIndex((x) => x.pin.id === targetId);
+    const before = side === "before" ? rest[at - 1] : rest[at];
+    const after = side === "before" ? rest[at] : rest[at + 1];
+    const index = fractionalIndex(before?.pin.index ?? null, after?.pin.index ?? null);
+    rest.splice(side === "before" ? at : at + 1, 0, { ...moving, pin: { ...moving.pin, index } });
+    setItems(rest);
+    void movePin(moving.pin.id, index).catch((e) => {
+      onError(e);
+      void load();
+    });
+  };
   return (
     <section className="home-section">
       <h2>
         <PinIcon size={12} /> {t("pinned")}
       </h2>
       <div className="pin-grid">
-        {docs.map((d) => (
-          <button key={d.id} className="pin-card" onClick={() => onNavigate({ name: "doc", id: d.id })}>
+        {docs.map((d, i) => (
+          <button
+            key={d.id}
+            className={`pin-card${dragging === items[i].pin.id ? " dragging" : ""}${over?.id === items[i].pin.id && dragging !== over.id ? ` drop-${over.side}` : ""}`}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", d.id);
+              setDragging(items[i].pin.id);
+            }}
+            onDragOver={(e) => {
+              if (!dragging) return;
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const side = e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+              if (over?.id !== items[i].pin.id || over.side !== side) setOver({ id: items[i].pin.id, side });
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (over) dropOn(over.id, over.side);
+              setDragging(null);
+              setOver(null);
+            }}
+            onDragEnd={() => {
+              setDragging(null);
+              setOver(null);
+            }}
+            onClick={() => onNavigate({ name: "doc", id: d.id })}
+          >
             <EntityIcon icon={d.icon} color={d.color} size={22} fallback={<FileText size={18} />} />
             <span className="pin-title">{d.title || t("untitled")}</span>
           </button>
