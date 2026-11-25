@@ -5,6 +5,7 @@
 // Grows with each part of the API: the team and users here, collections and documents with them.
 
 import type { TeamRow, UserRow } from "./users.ts";
+import { WORKSPACE_CREATION, WORKSPACE_DOMAIN } from "./config.ts";
 import { atLeast, type Access, type DocLike, type Perm } from "./access.ts";
 
 export type Abilities = Record<string, boolean | string[]>;
@@ -27,7 +28,7 @@ export function teamPolicy(actor: UserRow, team: TeamRow): Policy {
       read: true,
       update: admin,
       delete: false,
-      createTeam: false,
+      createTeam: admin && WORKSPACE_CREATION === "admins" && !!WORKSPACE_DOMAIN,
       createCollection: admin || (member && team.memberCollectionCreate),
       createDocument: !isGuest(actor),
       // Anyone signed in uploads (an avatar at least); where it may go is checked per document.

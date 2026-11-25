@@ -4,7 +4,7 @@
 // through the share (/s/<id>/files/<attachment>), only when the shared documents link to them.
 
 import { Hono } from "hono";
-import { PUBLIC_URL } from "../config.ts";
+import type { AppEnv } from "../auth.ts";
 import { sql } from "../db.ts";
 import { Access } from "../access.ts";
 import { documentUrl, slugify } from "../content.ts";
@@ -15,7 +15,7 @@ import { documentPolicy } from "../policies.ts";
 import { DOC_COLUMNS, presentUser, usersById, type DocumentRow } from "../presenters.ts";
 import { method } from "../rpc.ts";
 import { disposition, exists, open } from "../storage.ts";
-import { currentTeam } from "../users.ts";
+import { teamById, teamUrl, type TeamRow } from "../users.ts";
 import { documentFor, page } from "./common.ts";
 
 interface ShareRow {
@@ -43,9 +43,10 @@ interface ShareRow {
 }
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
-const shareUrl = (s: ShareRow) => `${PUBLIC_URL}/s/${s.urlId ?? s.id}`;
+const shareUrl = (s: ShareRow, team: TeamRow) => `${teamUrl(team)}/s/${s.urlId ?? s.id}`;
 
 async function present(rows: ShareRow[]) {
+  const team = rows.length ? await teamById(rows[0].teamId) : null;
   const users = await usersById(rows.map((s) => s.userId));
   const docIds = rows.map((s) => s.documentId).filter((x): x is string => !!x);
   const docs = docIds.length ? await sql<{ id: string; title: string; urlId: string }[]>`SELECT id, title, url_id FROM documents WHERE id = ANY(${docIds}::uuid[])` : [];
@@ -61,7 +62,7 @@ async function present(rows: ShareRow[]) {
       sourcePath: d ? documentUrl(d) : null,
       collectionId: s.collectionId,
       urlId: s.urlId,
-      url: shareUrl(s),
+      url: shareUrl(s, team!),
       domain: s.domain,
       title: s.title,
       iconUrl: s.iconUrl,
@@ -99,12 +100,12 @@ method("shares.info", async (call) => {
       UNION ALL SELECT p.id, p.parent_document_id, up.depth + 1 FROM documents p JOIN up ON p.id = up.parent_document_id)
     SELECT s.* FROM shares s JOIN up ON up.id = s.document_id
     WHERE s.revoked_at IS NULL AND (up.depth = 0 OR s.include_child_documents) ORDER BY up.depth`;
-  const canEdit = !!documentPolicy(a, d, await currentTeam()).abilities.share;
+  const canEdit = !!documentPolicy(a, d, await teamById(call.user.teamId)).abilities.share;
   return { data: { shares: await present(rows) }, policies: rows.map((s) => sharePolicy(s, canEdit)) };
 });
 
 method("shares.create", async (call) => {
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   if (!team.sharing) throw forbidden("Public sharing is turned off for this workspace");
   const a = await Access.for(call.user);
   const d = await documentFor(a, call.params.uuid("documentId", { required: true }));
@@ -168,11 +169,10 @@ method("shares.list", async (call) => {
 // ---------- The public pages ----------
 
 /** A live, published share and its document, or null (revoked, expired, sharing off, document gone). */
-async function liveShare(id: string) {
-  const team = await currentTeam();
+async function liveShare(id: string, team: TeamRow) {
   if (!team.sharing) return null;
   const isUuid = /^[0-9a-f-]{36}$/i.test(id);
-  const [s] = await sql<ShareRow[]>`SELECT * FROM shares WHERE ${isUuid ? sql`id = ${id}` : sql`url_id = ${id}`} AND revoked_at IS NULL AND published`;
+  const [s] = await sql<ShareRow[]>`SELECT * FROM shares WHERE team_id = ${team.id} AND ${isUuid ? sql`id = ${id}` : sql`url_id = ${id}`} AND revoked_at IS NULL AND published`;
   if (!s?.documentId || (s.expiresAt && s.expiresAt < new Date())) return null;
   const [d] = await sql<DocumentRow[]>`SELECT ${DOC_COLUMNS} FROM documents d WHERE d.id = ${s.documentId} AND d.deleted_at IS NULL AND d.published_at IS NOT NULL`;
   return d ? { s, d } : null;
@@ -199,10 +199,10 @@ function nav(shareId: string, root: DocumentRow, docs: DocumentRow[], current: s
   return `<ul><li>${link(root)}${level(root.id)}</li></ul>`;
 }
 
-export const shareRoutes = new Hono();
+export const shareRoutes = new Hono<AppEnv>();
 
-async function render(shareId: string, docRef: string | null) {
-  const live = await liveShare(shareId);
+async function render(shareId: string, docRef: string | null, team: TeamRow) {
+  const live = await liveShare(shareId, team);
   if (!live) return null;
   const { s, d: root } = live;
   const children = s.includeChildDocuments ? await childrenOf(root) : [];
@@ -211,7 +211,6 @@ async function render(shareId: string, docRef: string | null) {
   if (!doc) return null;
   await sql`UPDATE shares SET views = views + 1, last_accessed_at = now() WHERE id = ${s.id}`;
   const files = (url: string) => url.replace(/^\/api\/attachments\.redirect\?id=([0-9a-f-]{36})$/i, `/s/${shareId}/files/$1`);
-  const team = await currentTeam();
   const updated = s.showLastUpdated ? `<p class="updated">Updated ${esc(doc.updatedAt.toISOString().slice(0, 10))}</p>` : "";
   return htmlPage(doc.title || "Untitled", toHtml(doc.content as PMNode, files) + updated, {
     nav: children.length ? nav(shareId, root, children, doc.id) : undefined,
@@ -224,17 +223,17 @@ const notFoundPage = (_c?: unknown) =>
   new Response(htmlPage("Not found", "<p>This link doesn't exist, or isn't shared any more.</p>"), { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
 shareRoutes.get("/:shareId", async (c) => {
-  const html = await render(c.req.param("shareId"), null);
+  const html = await render(c.req.param("shareId"), null, c.get("team"));
   return html ? c.html(html) : notFoundPage(c);
 });
 
 shareRoutes.get("/:shareId/doc/:doc", async (c) => {
-  const html = await render(c.req.param("shareId"), c.req.param("doc"));
+  const html = await render(c.req.param("shareId"), c.req.param("doc"), c.get("team"));
   return html ? c.html(html) : notFoundPage(c);
 });
 
 shareRoutes.get("/:shareId/files/:id", async (c) => {
-  const live = await liveShare(c.req.param("shareId"));
+  const live = await liveShare(c.req.param("shareId"), c.get("team"));
   const id = c.req.param("id").toLowerCase();
   if (!live || !/^[0-9a-f-]{36}$/.test(id)) return notFoundPage(c);
   // Only files the shared documents actually link to.

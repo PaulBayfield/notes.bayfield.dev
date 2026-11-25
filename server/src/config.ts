@@ -88,6 +88,15 @@ export const oidc = process.env.OIDC_ISSUER
     }
   : null;
 
+/**
+ * Other workspaces live at "<subdomain>.<WORKSPACE_DOMAIN>" (a wildcard DNS record and certificate
+ * pointing here), or at custom domains. Unset: only custom domains (and the main address).
+ */
+export const WORKSPACE_DOMAIN = process.env.WORKSPACE_DOMAIN?.trim().toLowerCase().replace(/^\.+|\/+$/g, "") || null;
+
+/** Who may create workspaces (teams.create): "admins" of any workspace (default), or "none". */
+export const WORKSPACE_CREATION = process.env.WORKSPACE_CREATION?.trim().toLowerCase() === "none" ? "none" : "admins";
+
 /** Header your reverse proxy puts the visitor IP in (e.g. cf-connecting-ip). Unset: the TCP peer. */
 export const CLIENT_IP_HEADER = process.env.CLIENT_IP_HEADER?.toLowerCase();
 

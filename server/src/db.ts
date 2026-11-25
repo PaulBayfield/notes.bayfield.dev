@@ -469,6 +469,17 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX events_document ON events (document_id, created_at DESC);
   `,
+  /* 2: several workspaces: an identity has an account per workspace; sign-ins remember theirs */ `
+  ALTER TABLE user_authentications ADD COLUMN team_id uuid REFERENCES teams(id) ON DELETE CASCADE;
+  UPDATE user_authentications ua SET team_id = u.team_id FROM users u WHERE u.id = ua.user_id;
+  ALTER TABLE user_authentications ALTER COLUMN team_id SET NOT NULL;
+  ALTER TABLE user_authentications DROP CONSTRAINT user_authentications_provider_provider_id_key;
+  CREATE UNIQUE INDEX user_authentications_identity ON user_authentications (team_id, provider, provider_id);
+  ALTER TABLE oidc_states ADD COLUMN team_id uuid;
+  ALTER TABLE transfer_tokens ADD COLUMN team_id uuid;
+  CREATE UNIQUE INDEX teams_subdomain ON teams (lower(subdomain)) WHERE subdomain IS NOT NULL;
+  CREATE UNIQUE INDEX teams_domain ON teams (lower(domain)) WHERE domain IS NOT NULL;
+  `,
 ];
 
 export async function migrate() {

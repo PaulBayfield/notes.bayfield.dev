@@ -12,7 +12,7 @@ import { migrate, sql } from "./db.ts";
 import { authRoutes, cleanUpAuth, csrfCookie, desktopRedirectPage, type AppEnv } from "./auth.ts";
 import { ApiError } from "./http.ts";
 import { dispatch } from "./rpc.ts";
-import { currentTeam } from "./users.ts";
+import { defaultTeam, teamForHost } from "./users.ts";
 import "./methods/auth.ts";
 import "./methods/collections.ts";
 import "./methods/documents.ts";
@@ -25,7 +25,7 @@ import { flushCollaboration, handleCollaborationUpgrade } from "./collaboration.
 import { handleRealtimeUpgrade } from "./realtime.ts";
 
 await migrate();
-await currentTeam();
+await defaultTeam();
 
 const app = new Hono<AppEnv>();
 
@@ -47,6 +47,17 @@ app.get("/api/health", async (c) => {
 });
 app.get("/_health", (c) => c.text("OK"));
 
+// The workspace this address serves (the main address, a subdomain, a custom domain).
+app.use("*", async (c, next) => {
+  const team = await teamForHost(c.req.header("host"));
+  if (!team) {
+    if (c.req.path.startsWith("/api/")) return c.json(new ApiError("not_found", "No workspace at this address").toJSON(), 404);
+    return c.text("No workspace at this address.", 404);
+  }
+  c.set("team", team);
+  await next();
+});
+
 // Files, before the API's body limit: uploads go up to FILE_STORAGE_UPLOAD_MAX_SIZE.
 app.post("/api/files.create", bodyLimit({ maxSize: UPLOAD_MAX_SIZE + 1024 * 1024, onError: (c) => c.json(new ApiError("payload_too_large", "The file is too large").toJSON(), 413) }), filesCreate);
 app.get("/api/files.get", filesGet);
@@ -58,7 +69,7 @@ app.get("/api/:method", dispatch);
 
 app.route("/auth", authRoutes);
 app.route("/s", shareRoutes);
-app.get("/desktop-redirect", (c) => c.html(desktopRedirectPage(c.req.query("token") ?? "")));
+app.get("/desktop-redirect", (c) => c.html(desktopRedirectPage(c.req.query("token") ?? "", c.req.header("host") ?? new URL(PUBLIC_URL).host)));
 app.get("/robots.txt", (c) => c.text("User-agent: *\nDisallow: /\n"));
 
 // The web app used to live under /app/ on Outline's domain: old links still work.

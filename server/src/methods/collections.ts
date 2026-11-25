@@ -11,7 +11,7 @@ import { toMarkdown, type PMNode } from "../markdown.ts";
 import { collectionPolicy, userPolicy } from "../policies.ts";
 import { presentCollection, presentGroup, presentGroupMembership, presentMembership, presentUser, usersById, type CollectionRow, type GroupRow, type MembershipRow } from "../presenters.ts";
 import { method, type SignedInCall } from "../rpc.ts";
-import { currentTeam, getUser, type UserRow } from "../users.ts";
+import { teamById, getUser, type UserRow } from "../users.ts";
 import { collectionFor, page } from "./common.ts";
 
 const PERMISSIONS = ["read", "read_write"] as const;
@@ -30,7 +30,7 @@ function overview(call: SignedInCall): { description: string; content: unknown }
 }
 
 async function present(call: SignedInCall, c: CollectionRow, a: Access) {
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   const archivedBy = c.archivedById ? await getUser(c.archivedById) : null;
   return { data: presentCollection(c, call.apiVersion, archivedBy), policies: [collectionPolicy(a, c, team)] };
 }
@@ -47,7 +47,7 @@ method("collections.list", async (call) => {
     sql<CollectionRow[]>`SELECT c.* FROM collections c WHERE ${where} ORDER BY c.index COLLATE "C" NULLS LAST, c.created_at LIMIT ${limit} OFFSET ${offset}`,
     sql<{ total: number }[]>`SELECT count(*)::int AS total FROM collections c WHERE ${where}`,
   ]);
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return {
     pagination: page("collections.list", limit, offset, total),
     data: rows.map((c) => presentCollection(c, call.apiVersion)),
@@ -68,7 +68,7 @@ method("collections.documents", async (call) => {
 });
 
 method("collections.create", async (call) => {
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   const admin = call.user.role === "admin";
   if (!admin && !(call.user.role === "member" && team.memberCollectionCreate)) throw forbidden();
   const name = call.params.string("name", { required: true, max: 100 })!.trim();

@@ -9,7 +9,7 @@ import { notify } from "../notify.ts";
 import { teamPolicy, userPolicy } from "../policies.ts";
 import { DOC_COLUMNS, presentDocuments, presentGroup, presentTeam, presentUser, usersById, type DocumentRow, type GroupRow } from "../presenters.ts";
 import { method, type SignedInCall } from "../rpc.ts";
-import { createUser, currentTeam, forgetTeam, getUser, type TeamRow, type UserRole, type UserRow } from "../users.ts";
+import { createUser, teamById, forgetTeam, getUser, type TeamRow, type UserRole, type UserRow } from "../users.ts";
 import { page } from "./common.ts";
 
 const ROLES = ["admin", "member", "viewer", "guest"] as const;
@@ -91,7 +91,7 @@ method("users.activate", async (call) => {
 
 /** Invites by email: the account exists right away and is claimed at its first sign-in (by email). */
 method("users.invite", async (call) => {
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   if (call.user.role !== "admin" && !(call.user.role === "member" && !team.inviteRequired)) throw forbidden();
   const invites = call.params.array("invites") ?? [];
   if (!invites.length || invites.length > 20) throw invalid("invites should hold 1 to 20 people");
@@ -136,7 +136,7 @@ method("users.delete", async (call) => {
 method("teams.update", async (call) => {
   requireAdmin(call);
   const p = call.params;
-  const t = await currentTeam(true);
+  const t = (forgetTeam(call.user.teamId), await teamById(call.user.teamId));
   const name = p.string("name", { max: 255 });
   if (name !== undefined && !name.trim()) throw invalid("name can't be empty");
   const allowedDomains = p.array("allowedDomains");
@@ -159,7 +159,7 @@ method("teams.update", async (call) => {
       preferences = ${preferences ? sql.json({ ...(t.preferences ?? {}), ...preferences } as never) : t.preferences ? sql.json(t.preferences as never) : null},
       updated_at = now()
     WHERE id = ${t.id} RETURNING *`;
-  forgetTeam();
+  forgetTeam(t.id);
   publish({ name: "teams.update", data: { id: t.id }, teamId: t.id, actorId: call.user.id });
   return { data: presentTeam(updated), policies: [teamPolicy(call.user, updated)] };
 });
@@ -177,7 +177,7 @@ async function groupFor(call: SignedInCall, write = false) {
   const id = call.params.uuid("id", { required: true })!;
   const [g] = await sql<GroupRow[]>`SELECT ${groupColumns} FROM groups g WHERE g.id = ${id} AND g.team_id = ${call.user.teamId} AND g.deleted_at IS NULL`;
   if (!g) throw notFound();
-  if (write && !groupPolicy(call, await currentTeam(), g).abilities.update) throw forbidden();
+  if (write && !groupPolicy(call, await teamById(call.user.teamId), g).abilities.update) throw forbidden();
   return g;
 }
 
@@ -191,7 +191,7 @@ method("groups.list", async (call) => {
       ${query ? sql`AND notes_norm(g.name) LIKE ${"%" + query.toLowerCase() + "%"}` : sql``}
       ${userId ? sql`AND EXISTS (SELECT 1 FROM group_users gu WHERE gu.group_id = g.id AND gu.user_id = ${userId})` : sql``}
     ORDER BY lower(g.name) ${p.direction("ASC") === "ASC" ? sql`ASC` : sql`DESC`} LIMIT ${limit} OFFSET ${offset}`;
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return {
     pagination: page("groups.list", limit, offset),
     data: { groups: rows.map(presentGroup), groupUsers: [] },
@@ -201,11 +201,11 @@ method("groups.list", async (call) => {
 
 method("groups.info", async (call) => {
   const g = await groupFor(call);
-  return { data: presentGroup(g), policies: [groupPolicy(call, await currentTeam(), g)] };
+  return { data: presentGroup(g), policies: [groupPolicy(call, await teamById(call.user.teamId), g)] };
 });
 
 method("groups.create", async (call) => {
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   if (!(call.user.role === "admin" || (call.user.role === "member" && team.memberTeamCreate))) throw forbidden();
   const name = call.params.string("name", { required: true, max: 255 })!.trim();
   if (!name) throw invalid("name is required");
@@ -226,7 +226,7 @@ method("groups.update", async (call) => {
       disable_mentions = ${p.boolean("disableMentions") ?? g.disableMentions}, updated_at = now()
     WHERE id = ${g.id} RETURNING *, ${g.memberCount ?? 0}::int AS member_count`;
   publish({ name: "groups.update", data: { id: g.id }, teamId: call.user.teamId, actorId: call.user.id });
-  return { data: presentGroup(u), policies: [groupPolicy(call, await currentTeam(), u)] };
+  return { data: presentGroup(u), policies: [groupPolicy(call, await teamById(call.user.teamId), u)] };
 });
 
 method("groups.delete", async (call) => {

@@ -24,7 +24,7 @@ import {
   type MembershipRow,
 } from "../presenters.ts";
 import { method } from "../rpc.ts";
-import { currentTeam, type UserRow } from "../users.ts";
+import { teamById, type UserRow } from "../users.ts";
 import { collectionFor, documentFor, page } from "./common.ts";
 import { presentWithPolicies } from "./documents.ts";
 
@@ -291,14 +291,14 @@ method("templates.list", async (call) => {
       AND (d.collection_id IS NULL OR d.collection_id = ANY(${a.readableCollections()}::uuid[]))
       ${collectionId ? sql`AND d.collection_id = ${collectionId}` : sql``}
     ORDER BY d.updated_at DESC LIMIT ${limit} OFFSET ${offset}`;
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return { pagination: page("templates.list", limit, offset), data: await presentDocuments(rows, { includeData: true }), policies: rows.map((d) => documentPolicy(a, d, team)) };
 });
 
 method("templates.info", async (call) => {
   const a = await Access.for(call.user);
   const d = await templateFor(a, call.params.string("id", { required: true }));
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return { data: (await presentDocuments([d], { includeData: true }))[0], policies: [documentPolicy(a, d, team)] };
 });
 
@@ -316,7 +316,7 @@ method("templates.create", async (call) => {
     VALUES (${id}, ${newUrlId()}, ${call.user.teamId}, ${collectionId}, ${p.string("title", { max: 255 }) ?? ""}, ${p.nullableString("icon", 50) ?? null}, ${p.nullableString("color", 20) ?? null},
             ${content.text}, ${sql.json(content.content as never)}, ${content.state}, ${p.boolean("fullWidth") ?? false}, true, ${call.user.id}, ${call.user.id}, ${[call.user.id]}::uuid[], now())`;
   const [d] = await sql<DocumentRow[]>`SELECT ${DOC_COLUMNS} FROM documents d WHERE d.id = ${id}`;
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return { data: (await presentDocuments([d], { includeData: true }))[0], policies: [documentPolicy(await Access.for(call.user), d, team)] };
 });
 
@@ -335,7 +335,7 @@ method("templates.update", async (call) => {
       last_modified_by_id = ${call.user.id}, updated_at = now()
     WHERE id = ${t.id}`;
   const [d] = await sql<DocumentRow[]>`SELECT ${DOC_COLUMNS} FROM documents d WHERE d.id = ${t.id}`;
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return { data: (await presentDocuments([d], { includeData: true }))[0], policies: [documentPolicy(a, d, team)] };
 });
 
@@ -351,7 +351,7 @@ method("templates.restore", async (call) => {
   const t = await templateFor(a, call.params.string("id", { required: true }), true);
   await sql`UPDATE documents SET deleted_at = NULL, deleted_by_id = NULL WHERE id = ${t.id}`;
   const [d] = await sql<DocumentRow[]>`SELECT ${DOC_COLUMNS} FROM documents d WHERE d.id = ${t.id}`;
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return { data: (await presentDocuments([d], { includeData: true }))[0], policies: [documentPolicy(a, d, team)] };
 });
 
@@ -365,7 +365,7 @@ method("templates.duplicate", async (call) => {
     VALUES (${id}, ${newUrlId()}, ${t.teamId}, ${t.collectionId}, ${call.params.string("title", { max: 255 }) ?? t.title}, ${t.icon}, ${t.color}, ${content.text},
             ${sql.json(content.content as never)}, ${content.state}, ${t.fullWidth}, true, ${call.user.id}, ${call.user.id}, ${[call.user.id]}::uuid[], now())`;
   const [d] = await sql<DocumentRow[]>`SELECT ${DOC_COLUMNS} FROM documents d WHERE d.id = ${id}`;
-  const team = await currentTeam();
+  const team = await teamById(call.user.teamId);
   return { data: (await presentDocuments([d], { includeData: true }))[0], policies: [documentPolicy(a, d, team)] };
 });
 

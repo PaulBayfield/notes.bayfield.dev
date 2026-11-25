@@ -1,9 +1,8 @@
 // Rows as the API answers them: Outline's JSON shapes, field for field.
 
-import { PUBLIC_URL } from "./config.ts";
 import { sql } from "./db.ts";
 import { collectionUrl, documentUrl, tasksOf } from "./content.ts";
-import type { TeamRow, UserRow } from "./users.ts";
+import { teamUrl, type TeamRow, type UserRow } from "./users.ts";
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
@@ -48,7 +47,7 @@ export function presentTeam(t: TeamRow) {
     guestSignin: t.guestSignin,
     subdomain: t.subdomain,
     domain: t.domain,
-    url: PUBLIC_URL,
+    url: teamUrl(t),
     defaultUserRole: t.defaultUserRole,
     inviteRequired: t.inviteRequired,
     allowedDomains: t.allowedDomains,

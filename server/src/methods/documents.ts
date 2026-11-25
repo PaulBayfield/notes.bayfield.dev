@@ -27,7 +27,7 @@ import { forbidden, invalid, notFound } from "../http.ts";
 import { documentPolicy, userPolicy } from "../policies.ts";
 import { DOC_COLUMNS, presentDocuments, presentGroup, presentGroupMembership, presentMembership, presentUser, usersById, type DocumentRow, type GroupRow, type MembershipRow } from "../presenters.ts";
 import { method, type SignedInCall } from "../rpc.ts";
-import { currentTeam, getUser, type UserRow } from "../users.ts";
+import { getUser, teamById, type UserRow } from "../users.ts";
 import { collectionFor, documentFor, page } from "./common.ts";
 
 const PERMISSIONS = ["read", "read_write", "admin"] as const;
@@ -46,7 +46,7 @@ async function withChildren(ids: string[]): Promise<Set<string>> {
 
 /** Documents with their policies, as most methods answer. */
 export async function presentWithPolicies(a: Access, rows: DocumentRow[], opts: { includeData?: boolean } = {}) {
-  const team = await currentTeam();
+  const team = await teamById(a.user.teamId);
   const parents = await withChildren(rows.map((d) => d.id));
   return { data: await presentDocuments(rows, opts), policies: rows.map((d) => documentPolicy(a, d, team, { hasChildren: parents.has(d.id) })) };
 }

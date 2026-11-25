@@ -179,6 +179,7 @@ const providers = (await columns("authentication_providers")).size
 results.user_authentications = await copy("user_authentications", ["user_authentications"], {
   id: col("id"),
   user_id: col("userId"),
+  team_id: () => teamId,
   provider: (r) => providers.get(r.authenticationProviderId as string) ?? "oidc",
   provider_id: col("providerId"),
   scopes: (r) => pick(r, "scopes") ?? [],
