@@ -480,6 +480,58 @@ const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX teams_subdomain ON teams (lower(subdomain)) WHERE subdomain IS NOT NULL;
   CREATE UNIQUE INDEX teams_domain ON teams (lower(domain)) WHERE domain IS NOT NULL;
   `,
+  /* 3: OAuth, for MCP clients and other apps: registered clients, authorization codes, granted tokens */ `
+  CREATE TABLE oauth_clients (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    client_id text NOT NULL UNIQUE,
+    -- Confidential clients only; public ones (most MCP clients) prove themselves with PKCE.
+    client_secret_hash text,
+    name text NOT NULL,
+    description text,
+    developer_name text,
+    developer_url text,
+    avatar_url text,
+    redirect_uris text[] NOT NULL,
+    -- Registered by a client itself (RFC 7591) or by an admin in the workspace's settings.
+    registered_dynamically boolean NOT NULL DEFAULT false,
+    published boolean NOT NULL DEFAULT false,
+    created_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz
+  );
+
+  CREATE TABLE oauth_codes (
+    id text PRIMARY KEY,
+    client_id uuid NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect_uri text NOT NULL,
+    code_challenge text NOT NULL,
+    scope text[] NOT NULL DEFAULT '{}',
+    expires_at timestamptz NOT NULL
+  );
+
+  -- A person's grant to an app: the current access and refresh tokens (hashed), rotated on refresh.
+  CREATE TABLE oauth_authentications (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id uuid NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_token_hash text NOT NULL UNIQUE,
+    access_token_expires_at timestamptz NOT NULL,
+    refresh_token_hash text NOT NULL UNIQUE,
+    refresh_token_expires_at timestamptz NOT NULL,
+    scope text[] NOT NULL DEFAULT '{}',
+    last_active_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX oauth_authentications_user ON oauth_authentications (user_id);
+
+  -- Where to go after signing in (an OAuth consent page), carried through the provider's round trip.
+  ALTER TABLE oidc_states ADD COLUMN next text;
+  ALTER TABLE transfer_tokens ADD COLUMN next text;
+  `,
 ];
 
 export async function migrate() {

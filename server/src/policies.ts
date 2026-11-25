@@ -47,6 +47,8 @@ export function teamPolicy(actor: UserRow, team: TeamRow): Policy {
       listGroups: !isGuest(actor),
       listShares: !isGuest(actor),
       listApiKeys: admin,
+      createOAuthClient: admin,
+      listOAuthClients: admin,
       listWebhookSubscriptions: admin,
       update_settings: admin,
       manageNotifications: true,

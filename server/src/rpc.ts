@@ -6,7 +6,7 @@
 
 import type { Context } from "hono";
 import { checkCsrf, identify, type AppEnv, type Caller } from "./auth.ts";
-import { ApiError, Params, notFound, unauthenticated } from "./http.ts";
+import { ApiError, Params, forbidden, notFound, unauthenticated } from "./http.ts";
 import type { Policy } from "./policies.ts";
 import type { UserRow } from "./users.ts";
 
@@ -53,6 +53,35 @@ export function publicMethod(name: string, handler: Handler) {
 
 export const hasMethod = (name: string) => methods.has(name);
 
+/** Methods that only read (what a "read" scope allows), by their verb. */
+const READ_VERB = /\.(info|list|search|search_titles|documents|export|memberships|group_memberships|users|viewed|drafts|archived|deleted|redirect|config|insights)$/;
+export const isReadMethod = (name: string) => READ_VERB.test(name);
+
+/**
+ * Whether an API key's or OAuth token's scope allows a method: "read" (reading methods), "write"
+ * (everything), a method ("documents.info", also as "/api/documents.info") or a namespace ("documents.*").
+ */
+export function scopeAllows(scope: string[] | null | undefined, name: string): boolean {
+  if (!scope?.length) return true;
+  return scope.some((raw) => {
+    const s = raw.replace(/^\/api\//, "");
+    if (s === "write" || s === "*") return true;
+    if (s === "read") return isReadMethod(name);
+    if (s.endsWith(".*")) return name.startsWith(s.slice(0, -1));
+    return s === name;
+  });
+}
+
+/** Runs a method as a caller, outside an HTTP request (MCP tools): same checks, same answers. */
+export async function invokeMethod(name: string, raw: Record<string, unknown>, caller: Caller, c: Context<AppEnv>): Promise<Result> {
+  const m = methods.get(name);
+  if (!m) throw notFound();
+  if (!scopeAllows(caller.scope, name)) throw forbidden(`This token can't use ${name}`);
+  const result = await m.handler({ c, params: new Params(raw), caller, apiVersion: 3 });
+  if (result instanceof Response) throw new ApiError("invalid_request", `${name} answers a file`);
+  return result;
+}
+
 export async function dispatch(c: Context<AppEnv>) {
   const name = c.req.param("method") ?? "";
   const m = methods.get(name);
@@ -60,6 +89,7 @@ export async function dispatch(c: Context<AppEnv>) {
   const caller = await identify(c);
   c.set("caller", caller);
   if (m.auth && !caller) throw unauthenticated();
+  if (caller && !scopeAllows(caller.scope, name)) throw forbidden(`This API key can't use ${name}`);
   if (c.req.method !== "GET") checkCsrf(c, caller);
 
   let raw: Record<string, unknown> = {};

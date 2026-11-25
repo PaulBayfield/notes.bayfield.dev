@@ -174,11 +174,14 @@ export function verifyCollaborationToken(token: string): string | null {
 
 // ---------- One-time sign-in tokens (desktop, and handing a session to another address) ----------
 
-export async function transferToken(user: UserRow): Promise<string> {
+export async function transferToken(user: UserRow, next: string | null = null): Promise<string> {
   const token = randomToken();
-  await sql`INSERT INTO transfer_tokens (id, user_id, team_id, expires_at) VALUES (${sha256(token)}, ${user.id}, ${user.teamId}, ${new Date(Date.now() + 5 * 60_000)})`;
+  await sql`INSERT INTO transfer_tokens (id, user_id, team_id, next, expires_at) VALUES (${sha256(token)}, ${user.id}, ${user.teamId}, ${next}, ${new Date(Date.now() + 5 * 60_000)})`;
   return token;
 }
+
+/** A path on this site to go to after signing in ("/oauth/authorize?…"), or null: never another site. */
+export const safeNext = (v: string | undefined | null) => (v && v.startsWith("/") && !v.startsWith("//") && !v.includes("\\") ? v.slice(0, 2000) : null);
 
 // ---------- OIDC ----------
 
@@ -276,8 +279,8 @@ authRoutes.get("/oidc", async (c) => {
   const client = c.req.query("client") === "desktop" ? "desktop" : "web";
   await sql`DELETE FROM oidc_states WHERE expires_at < now()`;
   await sql`
-    INSERT INTO oidc_states (state, verifier, nonce, client, team_id, expires_at)
-    VALUES (${state}, ${verifier}, ${nonce}, ${client}, ${c.get("team").id}, ${new Date(Date.now() + 10 * 60_000)})`;
+    INSERT INTO oidc_states (state, verifier, nonce, client, team_id, next, expires_at)
+    VALUES (${state}, ${verifier}, ${nonce}, ${client}, ${c.get("team").id}, ${safeNext(c.req.query("next"))}, ${new Date(Date.now() + 10 * 60_000)})`;
   const url = new URL(d.authorization_endpoint);
   url.search = new URLSearchParams({
     response_type: "code",
@@ -296,8 +299,8 @@ authRoutes.get("/oidc.callback", async (c) => {
   const { code, state, error, error_description } = c.req.query();
   if (error) return fail(c, error_description || error);
   if (!code || !state) return fail(c, "The sign-in response was incomplete.");
-  const [saved] = await sql<{ verifier: string; nonce: string; client: string; teamId: string | null }[]>`
-    DELETE FROM oidc_states WHERE state = ${state} AND expires_at > now() RETURNING verifier, nonce, client, team_id`;
+  const [saved] = await sql<{ verifier: string; nonce: string; client: string; teamId: string | null; next: string | null }[]>`
+    DELETE FROM oidc_states WHERE state = ${state} AND expires_at > now() RETURNING verifier, nonce, client, team_id, next`;
   if (!saved) return fail(c, "This sign-in link has expired. Try again.");
   const team = saved.teamId ? await teamById(saved.teamId) : c.get("team");
   const base = teamUrl(team);
@@ -331,9 +334,9 @@ authRoutes.get("/oidc.callback", async (c) => {
     const here = c.req.header("host")?.toLowerCase() ?? new URL(PUBLIC_URL).host;
     if (new URL(base).host === here) {
       await startSession(c, user, "web");
-      return c.redirect("/");
+      return c.redirect(saved.next ?? "/");
     }
-    return c.redirect(`${base}/auth/redirect?token=${encodeURIComponent(await transferToken(user))}`);
+    return c.redirect(`${base}/auth/redirect?token=${encodeURIComponent(await transferToken(user, saved.next))}`);
   } catch (e) {
     console.warn("OIDC sign-in failed:", e);
     return fail(c, e instanceof Error ? e.message : "Sign-in failed", base);
@@ -344,12 +347,12 @@ authRoutes.get("/oidc.callback", async (c) => {
 authRoutes.get("/redirect", async (c) => {
   const token = c.req.query("token");
   if (!token) return fail(c, "The sign-in link is incomplete.");
-  const [t] = await sql<{ userId: string }[]>`DELETE FROM transfer_tokens WHERE id = ${sha256(token)} AND expires_at > now() RETURNING user_id`;
+  const [t] = await sql<{ userId: string; next: string | null }[]>`DELETE FROM transfer_tokens WHERE id = ${sha256(token)} AND expires_at > now() RETURNING user_id, next`;
   const user = t && (await getUser(t.userId));
   if (!user || user.deletedAt || user.suspendedAt || user.teamId !== c.get("team").id) return fail(c, "This sign-in link has expired. Try again.");
   // The desktop app asks without following redirects and keeps the token; a browser gets a session too.
   await startSession(c, user, c.req.header("User-Agent")?.includes("Tauri") ? "desktop" : "web");
-  return c.redirect("/");
+  return c.redirect(safeNext(t.next) ?? "/");
 });
 
 /** Local development only (see DEV_LOGIN_USER): signs in without the identity provider. */
@@ -360,7 +363,7 @@ authRoutes.get("/dev", async (c) => {
   const [existing] = await sql<{ id: string }[]>`SELECT id FROM users WHERE team_id = ${team.id} AND lower(email) = ${email}`;
   const user = existing ? (await getUser(existing.id))! : await createUser({ teamId: team.id, name: DEV_LOGIN_USER, email, avatarUrl: null });
   await startSession(c, user, "web");
-  return c.redirect("/");
+  return c.redirect(safeNext(c.req.query("next")) ?? "/");
 });
 
 /** The page the desktop app's sign-in window lands on: the app reads the token from its address. */

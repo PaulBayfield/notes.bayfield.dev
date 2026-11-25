@@ -21,6 +21,10 @@ import "./methods/documents.ts";
 import "./methods/library.ts";
 import "./methods/comments.ts";
 import "./methods/people.ts";
+import "./methods/apikeys.ts";
+import { oauthRoutes } from "./oauth.ts";
+import { mcpRoutes } from "./mcp.ts";
+import { cors } from "hono/cors";
 import { attachmentRedirect, filesCreate, filesGet } from "./methods/files.ts";
 import { shareRoutes } from "./methods/shares.ts";
 import { flushCollaboration, handleCollaborationUpgrade } from "./collaboration.ts";
@@ -74,6 +78,13 @@ app.use("/api/*", bodyLimit({ maxSize: 5 * 1024 * 1024, onError: (c) => c.json(n
 app.post("/api/:method", dispatch);
 app.get("/api/:method", dispatch);
 
+// MCP clients and OAuth apps: bearer tokens only (no cookies), so any origin may call these.
+const openCors = cors({ origin: "*", allowHeaders: ["Authorization", "Content-Type", "Mcp-Protocol-Version", "Mcp-Session-Id"], exposeHeaders: ["WWW-Authenticate", "Mcp-Session-Id"], maxAge: 86400 });
+for (const path of ["/mcp", "/mcp/*", "/oauth/token", "/oauth/register", "/oauth/revoke", "/.well-known/*"]) app.use(path, openCors);
+app.use("/mcp", bodyLimit({ maxSize: 5 * 1024 * 1024, onError: (c) => c.json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Request too large" } }, 413) }));
+app.use("/oauth/*", bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: "invalid_request", error_description: "Request too large" }, 413) }));
+app.route("/mcp", mcpRoutes);
+app.route("/", oauthRoutes);
 app.route("/auth", authRoutes);
 app.route("/s", shareRoutes);
 app.get("/desktop-redirect", (c) => c.html(desktopRedirectPage(c.req.query("token") ?? "", c.req.header("host") ?? new URL(PUBLIC_URL).host)));
