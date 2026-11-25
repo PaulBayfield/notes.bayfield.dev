@@ -45,7 +45,13 @@ function inline(tokens: Token[] = []): Node[] {
   let active: readonly Mark[] = [];
   const add = (m: Mark) => (active = m.addToSet(active));
   const remove = (type: (typeof marks)[string]) => (active = type.removeFromSet(active));
+  // Inside "@[Label](mention://id/type/modelId)": the label's text, then a mention node.
+  let mention: { id: string; type: string; modelId: string; label: string } | null = null;
   for (const t of tokens) {
+    if (mention && t.type !== "link_close") {
+      if (t.type === "text" || t.type === "code_inline") mention.label += t.content;
+      continue;
+    }
     switch (t.type) {
       case "text":
         if (t.content) out.push(schema.text(t.content, active));
@@ -81,11 +87,23 @@ function inline(tokens: Token[] = []): Node[] {
       case "mark_close":
         remove(marks.highlight);
         break;
-      case "link_open":
-        add(marks.link.create({ href: t.attrGet("href") ?? "" }));
+      case "link_open": {
+        const href = t.attrGet("href") ?? "";
+        const m = /^mention:\/\/([^/]*)\/([a-z_]+)\/([^/?#]+)$/i.exec(href);
+        const before = out[out.length - 1];
+        if (m && before?.isText && before.text!.endsWith("@")) {
+          // The "@" belongs to the mention.
+          out.pop();
+          if (before.text!.length > 1) out.push(schema.text(before.text!.slice(0, -1), before.marks));
+          mention = { id: decodeURIComponent(m[1]), type: m[2], modelId: decodeURIComponent(m[3]), label: "" };
+        } else add(marks.link.create({ href }));
         break;
+      }
       case "link_close":
-        remove(marks.link);
+        if (mention) {
+          out.push(nodes.mention.create({ id: mention.id || undefined, type: mention.type, modelId: mention.modelId, label: mention.label }));
+          mention = null;
+        } else remove(marks.link);
         break;
       case "image":
         out.push(nodes.image.create({ src: t.attrGet("src") ?? "", alt: t.content || null }));
