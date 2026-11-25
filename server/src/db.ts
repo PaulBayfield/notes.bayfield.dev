@@ -543,6 +543,18 @@ const MIGRATIONS: string[] = [
   CREATE INDEX events_actor ON events (actor_id, created_at DESC);
   CREATE INDEX documents_deleted ON documents (deleted_at) WHERE deleted_at IS NOT NULL;
   `,
+  /* 5: search history (Outline's searches.list) */ `
+  CREATE TABLE search_queries (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    query text NOT NULL,
+    results integer NOT NULL DEFAULT 0,
+    source text NOT NULL DEFAULT 'app',
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX search_queries_user ON search_queries (user_id, created_at DESC);
+  `,
 ];
 
 export async function migrate() {

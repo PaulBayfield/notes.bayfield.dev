@@ -185,13 +185,25 @@ method("documents.search", async (call) => {
   const status = statuses.length
     ? sql`(${statuses.includes("published") ? sql`(d.published_at IS NOT NULL AND d.archived_at IS NULL)` : sql`false`} OR ${statuses.includes("draft") ? sql`d.published_at IS NULL` : sql`false`} OR ${statuses.includes("archived") ? sql`d.archived_at IS NOT NULL` : sql`false`})`
     : sql`d.archived_at IS NULL`;
+  // Outline's dateFilter: updated in the last day, week, month or year.
+  const dateFilter = call.params.oneOf("dateFilter", ["day", "week", "month", "year"] as const);
+  const since = dateFilter ? new Date(Date.now() - { day: 1, week: 7, month: 31, year: 366 }[dateFilter] * 24 * 60 * 60_000) : null;
   const where = sql`d.team_id = ${a.user.teamId} AND d.deleted_at IS NULL AND NOT d.is_template AND ${status} AND ${a.readableFilter()} AND d.search @@ to_tsquery('simple', ${q})
-    ${collectionId ? sql`AND d.collection_id = ${collectionId}` : sql``} ${userId ? sql`AND d.created_by_id = ${userId}` : sql``}`;
+    ${collectionId ? sql`AND d.collection_id = ${collectionId}` : sql``} ${userId ? sql`AND d.created_by_id = ${userId}` : sql``}
+    ${since ? sql`AND d.updated_at >= ${since}` : sql``}`;
+  const sort = call.params.oneOf("sort", ["relevance", "updatedAt", "createdAt", "title"] as const) ?? "relevance";
+  const dir = call.params.direction(sort === "title" ? "ASC" : "DESC") === "ASC" ? sql`ASC` : sql`DESC`;
+  const order = sort === "updatedAt" ? sql`d.updated_at ${dir}` : sort === "createdAt" ? sql`d.created_at ${dir}` : sort === "title" ? sql`lower(d.title) ${dir}` : sql`ranking DESC, d.updated_at DESC`;
   const rows = await sql<(DocumentRow & { ranking: number; context: string })[]>`
     SELECT ${DOC_COLUMNS}, ts_rank(d.search, to_tsquery('simple', ${q})) AS ranking,
       ts_headline('simple', notes_norm(d.text), to_tsquery('simple', ${q}), 'StartSel=<b>, StopSel=</b>, MaxFragments=1, MinWords=10, MaxWords=30') AS context
-    FROM documents d WHERE ${where} ORDER BY ranking DESC, d.updated_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    FROM documents d WHERE ${where} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}`;
   const [{ total }] = await sql<{ total: number }[]>`SELECT count(*)::int AS total FROM documents d WHERE ${where}`;
+  // The search history: a new search, not the next page of one.
+  if (offset === 0) {
+    const source = call.caller.via === "apiKey" || call.caller.via === "oauth" ? "api" : "app";
+    void sql`INSERT INTO search_queries (team_id, user_id, query, results, source) VALUES (${a.user.teamId}, ${a.user.id}, ${query.trim().slice(0, 255)}, ${total}, ${source})`.catch(() => {});
+  }
   const presented = await presentWithPolicies(a, rows);
   return {
     pagination: page("documents.search", limit, offset, total),

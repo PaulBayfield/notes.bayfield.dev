@@ -68,6 +68,21 @@ function blocks(nodes: PMNode[] | undefined, rewrite: (url: string) => string): 
   return (nodes ?? []).map((n) => block(n, rewrite)).join("\n");
 }
 
+/** A heading's anchor, for links and the table of contents ("h-" and its text, as Outline). */
+export const headingId = (t: string) =>
+  "h-" +
+  t
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+/** The document's headings (level, text), for a table of contents. */
+export function headingsOf(doc: PMNode | null): { level: number; text: string }[] {
+  return (doc?.content ?? []).filter((n) => n.type === "heading").map((n) => ({ level: Number(n.attrs?.level ?? 1), text: text(n) }));
+}
+
 function block(n: PMNode, rewrite: (url: string) => string): string {
   const kids = () => blocks(n.content, rewrite);
   switch (n.type) {
@@ -75,7 +90,7 @@ function block(n: PMNode, rewrite: (url: string) => string): string {
       return `<p>${inline(n.content, rewrite) || "<br>"}</p>`;
     case "heading": {
       const l = Math.min(6, Math.max(1, Number(n.attrs?.level ?? 1)));
-      return `<h${l}>${inline(n.content, rewrite)}</h${l}>`;
+      return `<h${l} id="${esc(headingId(text(n)))}">${inline(n.content, rewrite)}</h${l}>`;
     }
     case "blockquote":
       return `<blockquote>${kids()}</blockquote>`;

@@ -23,6 +23,7 @@ import "./methods/comments.ts";
 import "./methods/people.ts";
 import "./methods/apikeys.ts";
 import "./methods/events.ts";
+import "./methods/searches.ts";
 import { watchMentions } from "./mentions.ts";
 import { scheduleHousekeeping } from "./housekeeping.ts";
 import { oauthRoutes } from "./oauth.ts";
