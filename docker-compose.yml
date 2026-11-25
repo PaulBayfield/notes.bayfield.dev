@@ -1,6 +1,36 @@
+# Notes with its database. Copy server/.env.example to server/.env (PUBLIC_URL, SECRET_KEY, OIDC_*)
+# and .env.example to .env (POSTGRES_PASSWORD), then: docker compose up -d
 services:
   notes:
+    image: ghcr.io/paulbayfield/notes.bayfield.dev:latest
     build: .
     ports:
-      - "8788:80"
+      - "3000:3000"
+    env_file: server/.env
+    environment:
+      DATABASE_URL: postgres://notes:${POSTGRES_PASSWORD}@db:5432/notes
+    volumes:
+      - files:/var/lib/notes/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: notes
+      POSTGRES_USER: notes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes -d notes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  files:
+  postgres:
