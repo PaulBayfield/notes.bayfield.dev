@@ -22,6 +22,9 @@ import "./methods/library.ts";
 import "./methods/comments.ts";
 import "./methods/people.ts";
 import "./methods/apikeys.ts";
+import "./methods/events.ts";
+import { watchMentions } from "./mentions.ts";
+import { scheduleHousekeeping } from "./housekeeping.ts";
 import { oauthRoutes } from "./oauth.ts";
 import { mcpRoutes } from "./mcp.ts";
 import { cors } from "hono/cors";
@@ -114,6 +117,8 @@ if (indexHtml) {
 }
 
 schedule("auth-cleanup", 60 * 60_000, async () => cleanUpAuth());
+scheduleHousekeeping();
+watchMentions();
 startJobs();
 
 const server = serve({ fetch: app.fetch, port: PORT }, ({ port }) => {

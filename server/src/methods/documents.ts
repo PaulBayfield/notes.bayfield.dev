@@ -20,8 +20,10 @@ import {
   updateInTree,
   type ContentFields,
   type DocJSON,
+  type NavNode,
 } from "../content.ts";
 import { publish } from "../events.ts";
+import { purgeDocuments } from "../housekeeping.ts";
 import { notify, subscribers } from "../notify.ts";
 import { forbidden, invalid, notFound } from "../http.ts";
 import { documentPolicy, userPolicy } from "../policies.ts";
@@ -97,6 +99,13 @@ method("documents.list", async (call) => {
   const collectionId = p.uuid("collectionId");
   const parent = p.has("parentDocumentId") ? (p.nullableUuid("parentDocumentId") ?? null) : undefined;
   const userId = p.uuid("userId");
+  // The documents linking to this one (Outline's backlinks): links are /doc/<slug>-<urlId>.
+  const backlinkId = p.uuid("backlinkDocumentId");
+  let backlinks = sql``;
+  if (backlinkId) {
+    const target = await documentFor(a, backlinkId);
+    backlinks = sql`AND d.id <> ${target.id} AND d.text ~ ${`/doc/([^/)\\s]*-)?${target.urlId}([^A-Za-z0-9]|$)`}`;
+  }
   const status = p.array("statusFilter")?.map(String);
   const states = status?.length
     ? sql`(${status.includes("published") ? sql`(d.published_at IS NOT NULL AND d.archived_at IS NULL)` : sql`false`}
@@ -105,7 +114,7 @@ method("documents.list", async (call) => {
   const where = sql`d.deleted_at IS NULL AND d.is_template = ${template} AND ${template ? sql`true` : states}
     ${collectionId ? sql`AND d.collection_id = ${collectionId}` : sql``}
     ${parent !== undefined ? (parent ? sql`AND d.parent_document_id = ${parent}` : sql`AND d.parent_document_id IS NULL`) : sql``}
-    ${userId ? sql`AND d.created_by_id = ${userId}` : sql``}`;
+    ${userId ? sql`AND d.created_by_id = ${userId}` : sql``} ${backlinks}`;
   return listOf(call, a, "documents.list", where, { total: true });
 });
 
@@ -425,8 +434,7 @@ method("documents.delete", async (call) => {
   if (call.params.boolean("permanent")) {
     if (!d.deletedAt) throw invalid("Only documents in the trash can be deleted permanently");
     if (!own && !a.isAdmin) throw forbidden();
-    const ids = [d.id, ...(await descendants(sql, d.id))];
-    await sql`DELETE FROM documents WHERE id = ANY(${ids}::uuid[])`;
+    await purgeDocuments([d.id, ...(await descendants(sql, d.id))]);
     publish({ name: "documents.permanent_delete", data: { id: d.id }, teamId: d.teamId, documentId: d.id, actorId: call.user.id });
     return { success: true };
   }
@@ -443,8 +451,29 @@ method("documents.delete", async (call) => {
 
 method("documents.empty_trash", async (call) => {
   const mine = call.user.role === "admin" ? sql`` : sql`AND created_by_id = ${call.user.id}`;
-  await sql`DELETE FROM documents WHERE team_id = ${call.user.teamId} AND deleted_at IS NOT NULL ${mine}`;
+  const trashed = await sql<{ id: string }[]>`SELECT id FROM documents WHERE team_id = ${call.user.teamId} AND deleted_at IS NOT NULL ${mine}`;
+  await purgeDocuments(trashed.map((d) => d.id));
   return { success: true };
+});
+
+/** A document's children, as the collection's tree orders them (Outline's documents.documents). */
+method("documents.documents", async (call) => {
+  const a = await Access.for(call.user);
+  const d = await documentFor(a, call.params.string("id", { required: true }));
+  if (d.collectionId && d.publishedAt) {
+    const [col] = await sql<{ documentStructure: NavNode[] | null }[]>`SELECT document_structure FROM collections WHERE id = ${d.collectionId}`;
+    const find = (nodes: NavNode[]): NavNode | null => {
+      for (const n of nodes) {
+        if (n.id === d.id) return n;
+        const hit = find(n.children ?? []);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const node = find(col?.documentStructure ?? []);
+    if (node) return { data: node };
+  }
+  return { data: await subtree(sql, d) };
 });
 
 /** A copy of a document (and its children with `recursive`), as a draft or published next to it. */

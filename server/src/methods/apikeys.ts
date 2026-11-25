@@ -7,6 +7,7 @@ import { sql } from "../db.ts";
 import { sha256 } from "../crypto.ts";
 import { forbidden, invalid, notFound } from "../http.ts";
 import { method } from "../rpc.ts";
+import { publish } from "../events.ts";
 import { getUser } from "../users.ts";
 import { page } from "./common.ts";
 
@@ -62,6 +63,7 @@ method("apiKeys.create", async ({ params, user, caller }) => {
     INSERT INTO api_keys (user_id, name, hash, last4, scope, expires_at)
     VALUES (${user.id}, ${name}, ${sha256(value)}, ${value.slice(-4)}, ${scope?.length ? scope : null}, ${expiresAt})
     RETURNING *`;
+  publish({ name: "apiKeys.create", data: { id: k.id, userId: user.id, name: k.name }, teamId: user.teamId, userIds: [user.id], actorId: user.id });
   return { data: present(k, value), policies: [policy(k)] };
 });
 
@@ -90,5 +92,6 @@ method("apiKeys.delete", async ({ params, user }) => {
   if (!k || k.teamId !== user.teamId) throw notFound();
   if (k.userId !== user.id && user.role !== "admin") throw forbidden();
   await sql`UPDATE api_keys SET deleted_at = now(), updated_at = now() WHERE id = ${id}`;
+  publish({ name: "apiKeys.delete", data: { id, userId: k.userId, name: k.name }, teamId: user.teamId, userIds: [k.userId], actorId: user.id });
   return { success: true };
 });

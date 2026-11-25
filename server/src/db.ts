@@ -532,6 +532,17 @@ const MIGRATIONS: string[] = [
   ALTER TABLE oidc_states ADD COLUMN next text;
   ALTER TABLE transfer_tokens ADD COLUMN next text;
   `,
+  /* 4: who's been told they're mentioned in a document (once each), and the events log's lookups */ `
+  CREATE TABLE document_mentions (
+    document_id uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    model_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (document_id, model_id)
+  );
+  CREATE INDEX events_team ON events (team_id, created_at DESC);
+  CREATE INDEX events_actor ON events (actor_id, created_at DESC);
+  CREATE INDEX documents_deleted ON documents (deleted_at) WHERE deleted_at IS NOT NULL;
+  `,
 ];
 
 export async function migrate() {
