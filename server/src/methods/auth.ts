@@ -8,6 +8,7 @@ import { forbidden, invalid, notFound } from "../http.ts";
 import { teamPolicy, userPolicy } from "../policies.ts";
 import { presentTeam, presentUser } from "../presenters.ts";
 import { method, publicMethod } from "../rpc.ts";
+import { publish } from "../events.ts";
 import { createUser, getUser, otherWorkspaces, teamById, teamUrl, type TeamRow } from "../users.ts";
 
 /** The sign-in options for the workspace at this address (Outline's shape: providers). */
@@ -17,7 +18,7 @@ publicMethod("auth.config", async ({ c }) => {
     ...(oidc ? [{ id: "oidc", name: oidc.name, authUrl: "/auth/oidc" }] : []),
     ...(DEV_LOGIN_USER ? [{ id: "dev", name: `Development (${DEV_LOGIN_USER})`, authUrl: "/auth/dev" }] : []),
   ];
-  return { data: { name: team.name, logo: team.avatarUrl ?? undefined, hostname: new URL(teamUrl(team)).host, providers } };
+  return { data: { name: team.name, logo: team.avatarUrl ?? undefined, hostname: new URL(teamUrl(team)).host, providers, workspaceDomain: WORKSPACE_DOMAIN ?? undefined } };
 });
 
 method("auth.info", async ({ user }) => {
@@ -83,6 +84,7 @@ method("teams.create", async ({ params, user }) => {
     INSERT INTO user_authentications (user_id, team_id, provider, provider_id, scopes)
     SELECT ${admin.id}, ${team.id}, provider, provider_id, scopes FROM user_authentications WHERE user_id = ${user.id}
     ON CONFLICT DO NOTHING`;
+  publish({ name: "teams.create", data: { id: team.id, name: team.name }, teamId: user.teamId, userIds: [user.id], actorId: user.id });
   const url = teamUrl(team);
   return { data: { team: presentTeam(team), transferUrl: `${url}/auth/redirect?token=${encodeURIComponent(await transferToken(admin))}` } };
 });

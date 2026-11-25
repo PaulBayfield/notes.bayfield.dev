@@ -117,6 +117,11 @@ method("users.resendInvite", async (call) => {
 method("users.delete", async (call) => {
   const id = call.params.uuid("id") ?? call.user.id;
   if (id !== call.user.id) requireAdmin(call);
+  else if (call.user.role !== "admin") {
+    // Members delete their own account unless the workspace says otherwise (Outline's membersCanDeleteAccount).
+    const team = await teamById(call.user.teamId);
+    if ((team.preferences as Record<string, unknown> | null)?.membersCanDeleteAccount === false) throw forbidden("Ask an admin to delete your account");
+  }
   const u = await getUser(id);
   if (!u || u.teamId !== call.user.teamId) throw notFound();
   if (u.role === "admin") {

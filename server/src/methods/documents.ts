@@ -202,7 +202,14 @@ method("documents.search", async (call) => {
   // The search history: a new search, not the next page of one.
   if (offset === 0) {
     const source = call.caller.via === "apiKey" || call.caller.via === "oauth" ? "api" : "app";
-    void sql`INSERT INTO search_queries (team_id, user_id, query, results, source) VALUES (${a.user.teamId}, ${a.user.id}, ${query.trim().slice(0, 255)}, ${total}, ${source})`.catch(() => {});
+    const q = query.trim().slice(0, 255);
+    // Search as you type: the query being typed replaces its beginnings from the last few seconds.
+    void sql
+      .begin(async (tx) => {
+        await tx`DELETE FROM search_queries WHERE user_id = ${a.user.id} AND created_at > now() - interval '30 seconds' AND starts_with(lower(${q}), lower(query))`;
+        await tx`INSERT INTO search_queries (team_id, user_id, query, results, source) VALUES (${a.user.teamId}, ${a.user.id}, ${q}, ${total}, ${source})`;
+      })
+      .catch(() => {});
   }
   const presented = await presentWithPolicies(a, rows);
   return {
