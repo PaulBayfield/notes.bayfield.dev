@@ -11,7 +11,8 @@
     "start": "node --env-file-if-exists=.env src/index.ts",
     "dev": "node --watch --env-file-if-exists=.env src/index.ts",
     "check": "tsc --noEmit",
-    "db:dev": "node scripts/dev-db.ts"
+    "db:dev": "node scripts/dev-db.ts",
+    "import:outline": "node --env-file-if-exists=.env scripts/import-outline.ts"
   },
   "dependencies": {
     "@hocuspocus/server": "^1.1.3",
