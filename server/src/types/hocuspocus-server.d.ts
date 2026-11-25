@@ -23,6 +23,7 @@ declare module "@hocuspocus/server" {
   }
 
   export interface Configuration {
+    extensions: unknown[];
     quiet: boolean;
     debounce: number;
     maxDebounce: number;
@@ -42,4 +43,10 @@ declare module "@hocuspocus/server" {
   }
 
   export const Server: Hocuspocus;
+}
+
+declare module "@hocuspocus/extension-redis" {
+  export class Redis {
+    constructor(configuration: { createClient?: () => unknown; prefix?: string; host?: string; port?: number; lockTimeout?: number });
+  }
 }

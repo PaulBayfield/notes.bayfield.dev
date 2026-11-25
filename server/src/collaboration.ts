@@ -10,6 +10,9 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { Server, type Document } from "@hocuspocus/server";
 import { WebSocketServer } from "ws";
+import { Redis } from "@hocuspocus/extension-redis";
+import { Redis as IORedis } from "ioredis";
+import { REDIS_URL } from "./config.ts";
 import * as Y from "yjs";
 import { sql } from "./db.ts";
 import { Access, atLeast } from "./access.ts";
@@ -42,6 +45,8 @@ const hocuspocus = Server.configure({
   debounce: 3000,
   maxDebounce: 10_000,
   timeout: 30_000,
+  // Several instances: edits to a document open on more than one reach all of them, and only one saves.
+  extensions: REDIS_URL ? [new Redis({ createClient: () => new IORedis(REDIS_URL!), prefix: "notes" })] : [],
 
   async onAuthenticate({ token, documentName, connection }) {
     const userId = verifyCollaborationToken(token);

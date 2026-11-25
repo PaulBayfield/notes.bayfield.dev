@@ -12,7 +12,9 @@ import { migrate, sql } from "./db.ts";
 import { authRoutes, cleanUpAuth, csrfCookie, desktopRedirectPage, type AppEnv } from "./auth.ts";
 import { ApiError } from "./http.ts";
 import { dispatch } from "./rpc.ts";
-import { defaultTeam, teamForHost } from "./users.ts";
+import { defaultTeam, forgetTeam, teamForHost } from "./users.ts";
+import { bus, listenToOtherInstances, type ChangeEvent } from "./events.ts";
+import { schedule, startJobs } from "./jobs.ts";
 import "./methods/auth.ts";
 import "./methods/collections.ts";
 import "./methods/documents.ts";
@@ -26,6 +28,11 @@ import { handleRealtimeUpgrade } from "./realtime.ts";
 
 await migrate();
 await defaultTeam();
+await listenToOtherInstances();
+// A workspace changed (here or on another instance): forget the cached copy.
+bus.on("change", (e: ChangeEvent) => {
+  if (e.name === "teams.update" || e.name === "teams.create") forgetTeam(e.teamId);
+});
 
 const app = new Hono<AppEnv>();
 
@@ -95,7 +102,8 @@ if (indexHtml) {
   console.warn(`No web build at ${DIST_DIR}; only the API is served. Run \`npm run build\` in the project root.`);
 }
 
-setInterval(cleanUpAuth, 60 * 60_000);
+schedule("auth-cleanup", 60 * 60_000, async () => cleanUpAuth());
+startJobs();
 
 const server = serve({ fetch: app.fetch, port: PORT }, ({ port }) => {
   console.log(`Notes server on http://localhost:${port} (public URL ${PUBLIC_URL})`);

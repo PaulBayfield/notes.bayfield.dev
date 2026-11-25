@@ -97,6 +97,12 @@ export const WORKSPACE_DOMAIN = process.env.WORKSPACE_DOMAIN?.trim().toLowerCase
 /** Who may create workspaces (teams.create): "admins" of any workspace (default), or "none". */
 export const WORKSPACE_CREATION = process.env.WORKSPACE_CREATION?.trim().toLowerCase() === "none" ? "none" : "admins";
 
+/**
+ * Redis, for several instances: a document open on two of them stays in sync through it (Outline's
+ * REDIS_URL). Unset: one instance (everything else is shared through Postgres).
+ */
+export const REDIS_URL = process.env.REDIS_URL?.trim() || null;
+
 /** Header your reverse proxy puts the visitor IP in (e.g. cf-connecting-ip). Unset: the TCP peer. */
 export const CLIENT_IP_HEADER = process.env.CLIENT_IP_HEADER?.toLowerCase();
 
