@@ -143,11 +143,36 @@ export function toHtml(doc: PMNode | null | undefined, rewrite: (url: string) =>
   return doc ? blocks(doc.content, rewrite) : "";
 }
 
-/** A standalone page around a document's HTML (exports, share pages). */
-export function page(title: string, body: string, opts: { nav?: string; lang?: string; noindex?: boolean } = {}): string {
+/** Where the "Published with Notes" badge points. */
+const PROJECT_URL = "https://github.com/PaulBayfield/notes.bayfield.dev";
+
+/** The workspace a public page belongs to: its name and logo in the header, the footer's badge. */
+export interface Brand {
+  name: string;
+  /** A public URL (workspace logos are public files), or null for its initial. */
+  logo: string | null;
+  /** Where the name links: the shared page's home. */
+  home: string;
+}
+
+function brandHeader(b: Brand) {
+  const mark = b.logo ? `<img class="brand-logo" src="${esc(b.logo)}" alt="">` : `<span class="brand-logo letter">${esc((b.name.trim()[0] ?? "N").toUpperCase())}</span>`;
+  return `<header class="brand-bar"><a class="brand" href="${esc(b.home)}">${mark}<span>${esc(b.name)}</span></a></header>`;
+}
+
+function brandFooter(b: Brand, lang: string) {
+  const fr = lang.toLowerCase().startsWith("fr");
+  return `<footer class="site-footer"><span>© ${new Date().getFullYear()} ${esc(b.name)}</span>
+<a class="made-with" href="${PROJECT_URL}" target="_blank" rel="noopener"><img src="/favicon.svg" alt="" width="16" height="16">${fr ? "Publié avec <strong>Notes</strong>" : "Published with <strong>Notes</strong>"}</a></footer>`;
+}
+
+/** A standalone page around a document's HTML (exports, share pages; `brand` for public pages). */
+export function page(title: string, body: string, opts: { nav?: string; lang?: string; noindex?: boolean; brand?: Brand } = {}): string {
+  const lang = opts.lang ?? "en";
   return `<!doctype html>
-<html lang="${esc(opts.lang ?? "en")}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-${opts.noindex !== false ? '<meta name="robots" content="noindex">' : ""}<title>${esc(title)}</title>
+<html lang="${esc(lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+${opts.noindex !== false ? '<meta name="robots" content="noindex">' : ""}<title>${esc(opts.brand && opts.brand.name !== title ? `${title} · ${opts.brand.name}` : title)}</title>
+${opts.brand ? `<link rel="icon" href="${esc(opts.brand.logo ?? "/favicon.svg")}">` : ""}
 <style>
 :root{color-scheme:light dark;--fg:#1f2328;--muted:#656d76;--bg:#fff;--line:#d0d7de;--code:#f6f8fa;--accent:#0969da}
 @media (prefers-color-scheme:dark){:root{--fg:#e6edf3;--muted:#8d96a0;--bg:#0d1117;--line:#30363d;--code:#161b22;--accent:#4493f8}}
@@ -162,7 +187,15 @@ th,td{border:1px solid var(--line);padding:6px 10px;vertical-align:top}th{backgr
 .notice{padding:10px 14px;border-radius:6px;background:var(--code);border-left:4px solid var(--accent);margin:1em 0}.notice-warning{border-color:#d29922}.notice-success,.notice-tip{border-color:#2da44e}
 .mention{color:var(--accent);font-weight:500}.updated{color:var(--muted);font-size:14px;margin-top:3em}
 @media (max-width:760px){.layout{display:block}nav{margin-bottom:24px}}
+body.branded{min-height:100vh;display:flex;flex-direction:column}body.branded .layout{flex:1;width:100%;box-sizing:border-box}
+.brand-bar{border-bottom:1px solid var(--line);padding:10px max(20px,calc((100% - 1100px) / 2 + 20px))}
+.brand{display:inline-flex;align-items:center;gap:10px;color:var(--fg);text-decoration:none;font-weight:600;font-size:15px}
+.brand-logo{width:26px;height:26px;border-radius:6px;object-fit:cover}
+.brand-logo.letter{display:grid;place-items:center;background:var(--accent);color:#fff;font-size:14px}
+.site-footer{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 16px;max-width:1100px;width:100%;box-sizing:border-box;margin:0 auto;padding:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+.made-with{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--line);border-radius:999px}
+.made-with:hover{color:var(--fg);border-color:var(--muted)}.made-with strong{color:var(--fg);font-weight:600}
 </style></head>
-<body><div class="layout">${opts.nav ? `<nav>${opts.nav}</nav>` : ""}<main><h1 class="title">${esc(title)}</h1>
-${body}</main></div></body></html>`;
+<body${opts.brand ? ' class="branded"' : ""}>${opts.brand ? brandHeader(opts.brand) : ""}<div class="layout">${opts.nav ? `<nav>${opts.nav}</nav>` : ""}<main><h1 class="title">${esc(title)}</h1>
+${body}</main></div>${opts.brand ? brandFooter(opts.brand, lang) : ""}</body></html>`;
 }

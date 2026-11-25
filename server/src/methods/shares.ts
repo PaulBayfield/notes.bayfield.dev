@@ -292,17 +292,19 @@ async function render(shareId: string, docRef: string | null, team: TeamRow) {
     return target ? sharedPath(shareId, target, live.root?.id ?? null) + (m?.[2] ?? "") : files(url);
   };
   const lang = team.preferences && typeof team.preferences.language === "string" ? team.preferences.language : undefined;
+  const brand = { name: team.name, logo: team.avatarUrl, home: `/s/${shareId}` };
   if (!doc) {
     // A collection's landing page: its description, and its documents in the sidebar.
     const c = live.collection!;
     const body = (c.content ? toHtml(c.content as PMNode, links) : "") || `<p>${live.docs.length} documents</p>`;
-    return htmlPage(s.title || c.name, body, { nav: nav(shareId, live, null), noindex: !s.allowIndexing, lang });
+    return htmlPage(s.title || c.name, body, { nav: nav(shareId, live, null), noindex: !s.allowIndexing, lang, brand });
   }
   const updated = s.showLastUpdated ? `<p class="updated">Updated ${esc(doc.updatedAt.toISOString().slice(0, 10))}</p>` : "";
   return htmlPage(doc.title || "Untitled", (s.showToc ? toc(doc.content) : "") + toHtml(doc.content as PMNode, links) + updated, {
     nav: live.collection || live.docs.length > 1 ? nav(shareId, live, doc.id) : undefined,
     noindex: !s.allowIndexing,
     lang,
+    brand,
   });
 }
 

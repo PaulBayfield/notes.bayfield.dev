@@ -191,7 +191,7 @@ interface AuthorizeRequest {
 /** Checks an authorization request. Before the redirect URI is known to be the client's, errors show here. */
 async function authorizeRequest(c: Context<AppEnv>, q: Record<string, string | undefined>): Promise<AuthorizeRequest | Response> {
   const team = c.get("team");
-  const errorPage = (message: string) => c.html(page("Can't connect", `<p>${esc(message)}</p>`), 400);
+  const errorPage = (message: string) => c.html(brandedPage(c, "Can't connect", `<p>${esc(message)}</p>`), 400);
   if (!oauthEnabled(team)) return errorPage("This workspace doesn't allow apps to connect.");
   const client = await findClient(team, q.client_id);
   if (!client) return errorPage("This app isn't registered with this workspace. Try connecting it again.");
@@ -228,7 +228,7 @@ oauthRoutes.get("/oauth/authorize", async (c) => {
       ...(oidc ? [`<a class="button" href="/auth/oidc?next=${next}">Sign in with ${esc(oidc.name)}</a>`] : []),
       ...(DEV_LOGIN_USER ? [`<a class="button" href="/auth/dev?next=${next}">Development (${esc(DEV_LOGIN_USER)})</a>`] : []),
     ];
-    return c.html(page(`Connect ${req.client.name}`, `${STYLE}<p>Sign in to ${esc(team.name)} to connect <strong>${esc(req.client.name)}</strong>.</p><p>${buttons.join(" ")}</p>`));
+    return c.html(brandedPage(c, `Connect ${req.client.name}`, `${STYLE}<p>Sign in to ${esc(team.name)} to connect <strong>${esc(req.client.name)}</strong>.</p><p>${buttons.join(" ")}</p>`));
   }
 
   const csrf = getCookie(c, CSRF_COOKIE) ?? "";
@@ -237,7 +237,7 @@ oauthRoutes.get("/oauth/authorize", async (c) => {
     .join("");
   const developer = req.client.developerUrl ? ` <span class="muted">(${esc(new URL(req.client.developerUrl).host)})</span>` : "";
   return c.html(
-    page(
+    brandedPage(c, 
       `Connect ${req.client.name}`,
       `${STYLE}<p><strong>${esc(req.client.name)}</strong>${developer} wants to access <strong>${esc(team.name)}</strong> as ${esc(caller.user.name)}.</p>
 <ul><li>${esc(describeScope(req.scope))}</li></ul>
@@ -246,6 +246,12 @@ oauthRoutes.get("/oauth/authorize", async (c) => {
     ),
   );
 });
+
+/** The workspace's name and logo around the consent pages, as on its shared pages. */
+const brandedPage = (c: Context<AppEnv>, title: string, body: string) => {
+  const team = c.get("team");
+  return page(title, body, { brand: { name: team.name, logo: team.avatarUrl, home: "/" } });
+};
 
 const STYLE = `<style>.button{display:inline-block;padding:8px 16px;border-radius:6px;border:1px solid var(--line);background:var(--accent);color:#fff;text-decoration:none;font:inherit;cursor:pointer}.button.secondary{background:transparent;color:var(--fg)}.muted{color:var(--muted);font-size:14px}</style>`;
 
@@ -256,7 +262,7 @@ oauthRoutes.post("/oauth/authorize", async (c) => {
   const caller = await identify(c).catch(() => null);
   const csrf = getCookie(c, CSRF_COOKIE);
   if (!caller || caller.via !== "cookie" || !csrf || !form.csrf || csrf.length !== form.csrf.length || !timingSafeEqual(Buffer.from(csrf), Buffer.from(form.csrf))) {
-    return c.html(page("Can't connect", "<p>This page expired. Go back to the app and connect it again.</p>"), 403);
+    return c.html(brandedPage(c, "Can't connect", "<p>This page expired. Go back to the app and connect it again.</p>"), 403);
   }
   const back = new URL(req.redirectUri);
   if (req.state) back.searchParams.set("state", req.state);
