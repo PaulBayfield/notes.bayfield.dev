@@ -19,6 +19,8 @@ WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 COPY server/src ./src
+# The Outline importer: docker compose run --rm <service> node scripts/import-outline.ts
+COPY server/scripts/import-outline.ts ./scripts/import-outline.ts
 COPY --from=web /app/server/src/editor.bundle.mjs ./src/editor.bundle.mjs
 COPY --from=web /app/dist /app/dist
 ARG APP_VERSION=dev
