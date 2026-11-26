@@ -146,6 +146,7 @@ function NotesApp({
   usePrefsSync({ theme: settings.theme, customThemes: settings.customThemes, customTheme: settings.customTheme, language: settings.language }, update);
   const mobile = useMediaQuery(MOBILE_QUERY);
   const wide = useMediaQuery("(min-width: 1100px)");
+  const roomForToc = useMediaQuery("(min-width: 1280px)");
   const [drawerOpen, setDrawerOpen] = useState(false);
   /**
    * Narrower than 1100px the side panel slides over the page instead of sitting beside it, so it
@@ -451,6 +452,9 @@ function NotesApp({
     else update({ sidebar: !settings.sidebar });
   };
   const panelVisible = (wide ? settings.panel : panelOverlay) && !focus;
+  // The workspace's table of contents position (Outline's tocPosition, "left" by default): beside the
+  // document when there's room for it, otherwise in the panel.
+  const tocBeside = (session.team.preferences?.tocPosition ?? "left") === "left" && roomForToc && !focus && !split;
   const toggleFocusToc = () => setFocusToc((v) => !v);
   const togglePanel = () => (focus ? toggleFocusToc() : wide ? update({ panel: !settings.panel }) : setPanelOverlay((o) => !o));
   /** The panel slides over the page: a backdrop and its own close button put it away. */
@@ -715,6 +719,7 @@ function NotesApp({
           viewRef={paneViews[pane]}
           reloadKey={reloadKey}
           findOpen={focused && actions.findOpen}
+          tocBeside={tocBeside}
           onCloseFind={() => {
             actions.setFindOpen(false);
             paneViews[pane].current?.focus();
@@ -910,6 +915,7 @@ function NotesApp({
       {(panelVisible || focusTocVisible) && (
         <Panel
           contentsOnly={focus}
+          tocBeside={tocBeside}
           onClose={panelOverlaid ? closePanel : undefined}
           meta={route.name === "doc" ? meta : null}
           headings={headings}

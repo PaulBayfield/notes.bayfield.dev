@@ -107,7 +107,7 @@ export function DetailsPage() {
         <Row label={t("separateEditing")} hint={t("separateEditingHint")}>
           <Switch checked={!pref<boolean>("seamlessEdit")} onChange={(on) => void savePref("seamlessEdit", !on)} />
         </Row>
-        <Row label={t("tocPosition")}>
+        <Row label={t("tocPosition")} hint={t("tocPositionHint")}>
           <Select
             value={pref<string>("tocPosition")}
             options={[

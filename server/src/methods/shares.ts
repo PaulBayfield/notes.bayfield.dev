@@ -271,7 +271,9 @@ function toc(content: unknown) {
   const min = Math.min(...hs.map((h) => h.level));
   const items = hs.map((h) => `<li style="margin-left:${(h.level - min) * 16}px"><a href="#${esc(headingId(h.text))}">${esc(h.text)}</a></li>`).join("");
   return `<details class="toc" open><summary>Contents</summary><ul>${items}</ul></details>
-<style>.toc{border:1px solid var(--line);border-radius:6px;padding:8px 14px;margin:0 0 1.5em;font-size:14px}.toc ul{list-style:none;padding:0;margin:6px 0 0}</style>`;
+<style>.toc{border:1px solid var(--line);border-radius:6px;padding:8px 14px;margin:0 0 1.5em;font-size:14px}.toc ul{list-style:none;padding:0;margin:6px 0 0}
+nav .toc{border:0;padding:0;margin:0}nav .toc summary{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);cursor:pointer}
+nav .toc a{padding:2px 0}.toc-side{position:sticky;top:16px}nav ul+.toc-side{margin-top:20px}</style>`;
 }
 
 export const shareRoutes = new Hono<AppEnv>();
@@ -300,8 +302,14 @@ async function render(shareId: string, docRef: string | null, team: TeamRow) {
     return htmlPage(s.title || c.name, body, { nav: nav(shareId, live, null), noindex: !s.allowIndexing, lang, brand });
   }
   const updated = s.showLastUpdated ? `<p class="updated">Updated ${esc(doc.updatedAt.toISOString().slice(0, 10))}</p>` : "";
-  return htmlPage(doc.title || "Untitled", (s.showToc ? toc(doc.content) : "") + toHtml(doc.content as PMNode, links) + updated, {
-    nav: live.collection || live.docs.length > 1 ? nav(shareId, live, doc.id) : undefined,
+  // The workspace's table of contents position (Outline's tocPosition, "left" by default): in the side
+  // column, under the shared pages' tree, or above the text.
+  const contents = s.showToc ? toc(doc.content) : "";
+  const tocLeft = !!contents && (team.preferences?.tocPosition ?? "left") === "left";
+  const tree = live.collection || live.docs.length > 1 ? nav(shareId, live, doc.id) : "";
+  const side = tree + (tocLeft ? `<div class="toc-side">${contents}</div>` : "");
+  return htmlPage(doc.title || "Untitled", (tocLeft ? "" : contents) + toHtml(doc.content as PMNode, links) + updated, {
+    nav: side || undefined,
     noindex: !s.allowIndexing,
     lang,
     brand,

@@ -9,6 +9,7 @@ import { Dialog } from "./Dialogs";
 import { COLORS, IconPicker } from "./IconPicker";
 import { FileText, Shapes, X } from "./icons";
 import { FindBar } from "./FindBar";
+import { TocNav } from "./Panel";
 import { embedsEnabled } from "../lib/docPrefs";
 import type { HeadingPrefixStyle } from "../editor/headingPrefix";
 import { Editor, type EditorStatus, type Heading } from "../editor/Editor";
@@ -49,6 +50,8 @@ interface Props {
   reloadKey: number;
   findOpen: boolean;
   onCloseFind: () => void;
+  /** The workspace puts the table of contents beside the document (and the window is wide enough). */
+  tocBeside: boolean;
 }
 
 /**
@@ -63,6 +66,9 @@ const cacheMeta = (key: string, meta: DocMeta) => {
 
 export function DocumentView(p: Props) {
   const { t, f, settings } = useSettings();
+  // The headings, for the table of contents beside the document.
+  const [headings, setHeadings] = useState<Heading[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [meta, setMetaState] = useState<DocMeta | null>(() => metaCache.get(p.id) ?? null);
   const setMeta = (next: DocMeta | null) => {
     if (next) cacheMeta(p.id, next);
@@ -203,8 +209,14 @@ export function DocumentView(p: Props) {
   ].join("\n");
 
   return (
-    <div className="doc-scroll" id={p.focused ? "doc-scroll" : undefined}>
+    <div className={`doc-scroll${p.tocBeside && headings.length ? " toc-beside" : ""}`} id={p.focused ? "doc-scroll" : undefined} ref={scrollRef}>
       {p.findOpen && <FindBar viewRef={p.viewRef} editable={editable} onClose={p.onCloseFind} />}
+      {p.tocBeside && headings.length > 0 && (
+        <aside className="doc-toc-beside" aria-label={t("contents")}>
+          <div className="doc-toc-title">{t("contents")}</div>
+          <TocNav headings={headings} viewRef={p.viewRef} scroller={() => scrollRef.current} active />
+        </aside>
+      )}
       <article className={`doc${settings.fullWidth || doc.fullWidth ? " full-width" : ""} font-${settings.font}`} style={{ fontSize: settings.fontSize }}>
         {doc.icon && editable ? (
           <button className="doc-icon editable" title={t("pageIcon")} onClick={() => setIconOpen(true)}>
@@ -277,7 +289,10 @@ export function DocumentView(p: Props) {
             p.onStatus(s);
           }}
           onPresence={p.onPresence}
-          onHeadings={p.onHeadings}
+          onHeadings={(h) => {
+            setHeadings(h);
+            p.onHeadings(h);
+          }}
           onError={p.onError}
           onStartComment={p.onStartComment}
           onCommentClick={p.onCommentClick}

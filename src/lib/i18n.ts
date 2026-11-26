@@ -563,8 +563,8 @@ const en = {
   separateEditing: "Separate editing",
   separateEditingHint: "Documents open read-only in Outline, with an Edit button.",
   tocPosition: "Table of contents position",
-  tocLeft: "Left",
-  tocRight: "Right",
+  tocLeft: "Left, beside the document",
+  tocRight: "Right, in the side panel",
   securityHint: "Who can join, and what members can do.",
   sAccess: "Access",
   sMembersCanInvite: "Allow users to send invites",
@@ -846,6 +846,7 @@ const en = {
   deleteAccountMessage: "Your account in {name} is deleted for good and you're signed out. This can't be undone.",
   restoredCollection: "“{name}” restored",
   deletedInDays: "Deleted for good in {n} days",
+  tocPositionHint: "For everyone in the workspace, and on shared pages. Narrow windows keep it in the side panel.",
 };
 
 export type StringKey = keyof typeof en;
@@ -1409,8 +1410,8 @@ const fr: Record<StringKey, string> = {
   separateEditing: "Édition séparée",
   separateEditingHint: "Les documents s'ouvrent en lecture dans Outline, avec un bouton Modifier.",
   tocPosition: "Position de la table des matières",
-  tocLeft: "À gauche",
-  tocRight: "À droite",
+  tocLeft: "À gauche, à côté du document",
+  tocRight: "À droite, dans le panneau latéral",
   securityHint: "Qui peut rejoindre l'espace, et ce que les membres peuvent faire.",
   sAccess: "Accès",
   sMembersCanInvite: "Autoriser les invitations",
@@ -1692,6 +1693,7 @@ const fr: Record<StringKey, string> = {
   deleteAccountMessage: "Votre compte dans {name} sera supprimé définitivement et vous serez déconnecté. C'est irréversible.",
   restoredCollection: "« {name} » restaurée",
   deletedInDays: "Supprimé définitivement dans {n} jours",
+  tocPositionHint: "Pour tout le monde dans l'espace, et sur les pages partagées. Les fenêtres étroites la gardent dans le panneau latéral.",
 };
 
 const strings: Record<Lang, Record<StringKey, string>> = { en, fr };

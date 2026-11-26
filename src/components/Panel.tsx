@@ -43,6 +43,8 @@ interface Props {
   onOpenDoc: (id: string, newTab: boolean) => void;
   /** Focus mode: just the table of contents, without the other tabs. */
   contentsOnly?: boolean;
+  /** The table of contents is beside the document (the workspace's "left" setting): no Contents tab. */
+  tocBeside?: boolean;
   /** Set when the panel slides over the page (narrow windows): it gets its own close button. */
   onClose?: () => void;
 }
@@ -51,33 +53,16 @@ interface Props {
 export function Panel(p: Props) {
   const { t, settings, update } = useSettings();
   const { meta, headings } = p;
-  const tab: PanelTab = p.contentsOnly ? "contents" : p.tab;
-  const minLevel = Math.min(...headings.map((h) => h.level), 4);
-
+  const tabs = p.tocBeside ? TABS.filter(([id]) => id !== "contents") : TABS;
+  const tab: PanelTab = p.contentsOnly ? "contents" : p.tocBeside && p.tab === "contents" ? "comments" : p.tab;
   const sync = settings.tocSync;
-  const current = useCurrentHeading(p.viewRef, headings, tab === "contents" && !!meta && sync);
-  // In a long table of contents, the heading being read stays in view.
-  const tocRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (!sync || current < 0) return;
-    tocRef.current?.querySelector<HTMLElement>(".toc-item.active")?.scrollIntoView({ block: "nearest" });
-  }, [current, sync]);
-
-  const scrollTo = (pos: number) => {
-    const view = p.viewRef.current;
-    if (!view) return;
-    const dom = view.nodeDOM(pos);
-    if (dom instanceof HTMLElement) dom.scrollIntoView({ behavior: "smooth", block: "start" });
-    // On a phone the panel covers the whole page: get it out of the way to show the heading.
-    if (p.onClose && matchMedia(MOBILE_QUERY).matches) p.onClose();
-  };
 
   return (
     <aside className={`panel${p.onClose ? " overlay" : ""}`}>
       <div className="panel-header" data-tauri-drag-region>
         {meta && !p.contentsOnly ? (
           <div className="panel-tabs" role="tablist">
-            {TABS.map(([id, label, Icon]) => (
+            {tabs.map(([id, label, Icon]) => (
               <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} title={t(label)} aria-label={t(label)} onClick={() => p.onTab(id)}>
                 <Icon size={16} />
               </button>
@@ -136,25 +121,13 @@ export function Panel(p: Props) {
             onError={p.onError}
           />
         ) : (
-          <>
-            {headings.length ? (
-              <nav className="toc" ref={tocRef}>
-                {headings.map((h, i) => (
-                  <button
-                    key={h.pos}
-                    className={`toc-item${sync && i === current ? " active" : ""}${h.level === minLevel ? " top" : ""}`}
-                    style={{ ["--indent" as string]: h.level - minLevel }}
-                    title={h.text}
-                    onClick={() => scrollTo(h.pos)}
-                  >
-                    {h.text || t("untitled")}
-                  </button>
-                ))}
-              </nav>
-            ) : (
-              <p className="panel-note">{t("noHeadings")}</p>
-            )}
-          </>
+          <TocNav
+            headings={headings}
+            viewRef={p.viewRef}
+            scroller={() => document.getElementById("doc-scroll")}
+            active={tab === "contents" && !!meta}
+            onPicked={() => p.onClose && matchMedia(MOBILE_QUERY).matches && p.onClose()}
+          />
         )}
       </div>
     </aside>
@@ -217,11 +190,65 @@ function Backlinks({ documentId, docTick, onOpen }: { documentId: string; docTic
   );
 }
 
+/**
+ * A document's table of contents: its headings, the one being read highlighted (when following is on),
+ * a click scrolls there. In the panel, or beside the document.
+ */
+export function TocNav({
+  headings,
+  viewRef,
+  scroller,
+  active,
+  onPicked,
+}: {
+  headings: Heading[];
+  viewRef: RefObject<EditorView | null>;
+  /** The element the document scrolls in. */
+  scroller: () => HTMLElement | null;
+  /** Shown: only then does it follow the reading position. */
+  active: boolean;
+  onPicked?: () => void;
+}) {
+  const { t, settings } = useSettings();
+  const sync = settings.tocSync;
+  const minLevel = Math.min(...headings.map((h) => h.level), 4);
+  const current = useCurrentHeading(viewRef, headings, active && sync, scroller);
+  // In a long table of contents, the heading being read stays in view.
+  const tocRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!sync || current < 0) return;
+    tocRef.current?.querySelector<HTMLElement>(".toc-item.active")?.scrollIntoView({ block: "nearest" });
+  }, [current, sync]);
+
+  const scrollTo = (pos: number) => {
+    const dom = viewRef.current?.nodeDOM(pos);
+    if (dom instanceof HTMLElement) dom.scrollIntoView({ behavior: "smooth", block: "start" });
+    onPicked?.();
+  };
+
+  if (!headings.length) return <p className="panel-note">{t("noHeadings")}</p>;
+  return (
+    <nav className="toc" ref={tocRef}>
+      {headings.map((h, i) => (
+        <button
+          key={h.pos}
+          className={`toc-item${sync && i === current ? " active" : ""}${h.level === minLevel ? " top" : ""}`}
+          style={{ ["--indent" as string]: h.level - minLevel }}
+          title={h.text}
+          onClick={() => scrollTo(h.pos)}
+        >
+          {h.text || t("untitled")}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 /** The heading the reader is at: the last one scrolled past the top third of the page. */
-function useCurrentHeading(viewRef: RefObject<EditorView | null>, headings: Heading[], active: boolean): number {
+function useCurrentHeading(viewRef: RefObject<EditorView | null>, headings: Heading[], active: boolean, getScroller: () => HTMLElement | null): number {
   const [current, setCurrent] = useState(-1);
   useEffect(() => {
-    const scroller = document.getElementById("doc-scroll");
+    const scroller = getScroller();
     if (!active || !scroller) return;
     let frame = 0;
     const measure = () => {
@@ -243,6 +270,7 @@ function useCurrentHeading(viewRef: RefObject<EditorView | null>, headings: Head
       scroller.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(frame);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewRef, headings, active]);
   return current;
 }

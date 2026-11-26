@@ -2886,3 +2886,32 @@ textarea.text-field {
 .pin-card.drop-after {
   box-shadow: 3px 0 0 var(--primary);
 }
+
+/* Table of contents beside the document (the workspace's "left" position) */
+.doc-scroll.toc-beside {
+  display: grid;
+  grid-template-columns: minmax(200px, 250px) minmax(0, 1fr) 32px;
+  align-items: start;
+}
+.doc-scroll.toc-beside > * {
+  grid-column: 2;
+}
+.doc-scroll.toc-beside > .doc-toc-beside {
+  grid-column: 1;
+  grid-row: 1 / span 30;
+  position: sticky;
+  top: 0;
+  max-height: 100cqh;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 56px 8px 24px 20px;
+  box-sizing: border-box;
+}
+.doc-toc-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  padding: 0 8px 6px;
+}
