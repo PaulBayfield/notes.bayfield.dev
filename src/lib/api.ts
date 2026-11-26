@@ -296,7 +296,8 @@ export type AttachmentPreset = "documentAttachment" | "avatar" | "emoji";
 export const uploadAttachment = (documentId: string, file: File) => uploadFile(file, "documentAttachment", documentId);
 
 /** Uploads a file to Outline's storage. Only document attachments belong to a document. */
-export async function uploadFile(file: File, preset: AttachmentPreset, documentId?: string): Promise<Attachment> {
+/** `onProgress`: the share sent so far, 0 to 1 (web only; the desktop app uploads from Rust, in one go). */
+export async function uploadFile(file: File, preset: AttachmentPreset, documentId?: string, onProgress?: (share: number) => void): Promise<Attachment> {
   const contentType = file.type || "application/octet-stream";
   if (isTauri) {
     // The desktop app uploads from Rust: WebView2 drops file bodies sent to the notes:// proxy.
@@ -322,6 +323,30 @@ export async function uploadFile(file: File, preset: AttachmentPreset, documentI
   form.append("file", file);
   // Local storage uploads to /api/files.create with the session (and its CSRF token); S3 to its own URL.
   const local = data.uploadUrl.startsWith("/");
+  if (onProgress) {
+    // fetch can't report upload progress; XMLHttpRequest can.
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", data.uploadUrl);
+      xhr.withCredentials = local;
+      if (local) for (const [k, v] of Object.entries(csrfHeader())) xhr.setRequestHeader(k, v);
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) return resolve();
+        let message = `Upload failed (${xhr.status})`;
+        try {
+          message = JSON.parse(xhr.responseText).message || message;
+        } catch {
+          // Not JSON.
+        }
+        reject(new ApiError(message, xhr.status));
+      };
+      xhr.onerror = () => reject(new ApiError("Couldn't reach the server. Check your connection.", 0));
+      xhr.send(form);
+    });
+    onProgress(1);
+    return { ...data.attachment, contentType };
+  }
   const post = await fetch(data.uploadUrl, {
     method: "POST",
     body: form,

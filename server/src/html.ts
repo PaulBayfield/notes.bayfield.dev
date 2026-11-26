@@ -41,9 +41,14 @@ function inline(nodes: PMNode[] | undefined, rewrite: (url: string) => string): 
       case "br":
         out += "<br>";
         break;
-      case "emoji":
-        out += `<span class="emoji">:${esc(n.attrs?.["data-name"])}:</span>`;
+      case "emoji": {
+        // Custom emoji are stored by id: their image. Others by shortcode.
+        const name = String(n.attrs?.["data-name"] ?? "");
+        out += /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name)
+          ? `<img class="custom-emoji" src="/api/emojis.redirect?id=${esc(name)}" alt="" style="height:1.2em;width:auto;vertical-align:-0.25em;border-radius:0">`
+          : `<span class="emoji">:${esc(name)}:</span>`;
         break;
+      }
       case "mention":
         out += `<span class="mention">@${esc(n.attrs?.label)}</span>`;
         break;

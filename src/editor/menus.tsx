@@ -12,7 +12,7 @@ import { CalendarIcon, Users as UsersIcon } from "../components/icons";
 import { dateLabel, dateLong, datesFor } from "./dates";
 import type { StringKey, Translate } from "../lib/i18n";
 import { blocks, findParent, insertBlock, isBlockActive, isMarkActive, toggleHeading, toggleList, toggleWrap } from "./commands";
-import { searchEmoji } from "./emoji";
+import { customEmojiSrc, searchCustomEmoji, searchEmoji } from "./emoji";
 import { schema } from "./schema";
 import { suggestKey, suggestKeys, type SuggestState } from "./suggest";
 import { closePasteMenu, embedPastedLink, pasteMenuKey, pasteMenuKeys } from "./paste";
@@ -134,21 +134,20 @@ export function SuggestMenu({ view, state, t, self, pickFile, uploads = true }: 
           })),
       );
     } else if (trigger === ":") {
-      void searchEmoji(query).then((found) =>
-        done(
-          found.map((e) => ({
-            key: e.name,
-            label: `:${e.name}:`,
-            icon: e.emoji,
-            run: (v) => {
-              const current = suggestKey.getState(v.state);
-              if (!current) return;
-              v.dispatch(v.state.tr.replaceWith(current.from, current.to, nodes.emoji.create({ "data-name": e.name })).scrollIntoView());
-              v.focus();
-            },
-          })),
-        ),
-      );
+      const insert = (name: string) => (v: EditorView) => {
+        const current = suggestKey.getState(v.state);
+        if (!current) return;
+        v.dispatch(v.state.tr.replaceWith(current.from, current.to, nodes.emoji.create({ "data-name": name })).scrollIntoView());
+        v.focus();
+      };
+      // The workspace's own emoji first (stored by id), then the standard ones.
+      const own = searchCustomEmoji(query, 4).map((e) => ({
+        key: `custom:${e.id}`,
+        label: `:${e.name}:`,
+        icon: <img className="custom-emoji" src={customEmojiSrc(e.id)} alt="" />,
+        run: insert(e.id),
+      }));
+      void searchEmoji(query, 8 - own.length).then((found) => done([...own, ...found.map((e) => ({ key: e.name, label: `:${e.name}:`, icon: e.emoji, run: insert(e.name) }))]));
     } else if (trigger === "[[") {
       // Notion's page link: documents only, as a mention.
       const timer = setTimeout(async () => {
@@ -334,6 +333,7 @@ function EmojiPopover({ view, pos, t, onClose }: { view: EditorView; pos: number
       <input className="text-input" autoFocus placeholder={t("searchEmoji")} value={query} onChange={(e) => setQuery(e.target.value)} />
       <EmojiGrid
         query={query}
+        withCustom
         onPick={(e) => {
           if (!e) return;
           const { selection } = view.state;

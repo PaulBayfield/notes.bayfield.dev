@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   can,
-  chooseAndUploadImage,
   createEmoji,
   createTemplate,
   deleteEmoji,
@@ -14,6 +13,7 @@ import {
   revokeShare,
   templateInfo,
   updateTemplate,
+  uploadFile,
   type Attachment,
   type CustomEmoji,
   type Envelope,
@@ -24,10 +24,11 @@ import {
 import { openExternal } from "../../lib/platform";
 import { useSettings } from "../../lib/settings";
 import { docFrom, StaticEditor } from "../../editor/StaticEditor";
-import { ConfirmDialog } from "../Dialogs";
+import { ConfirmDialog, Dialog } from "../Dialogs";
+import { isTauri } from "../../lib/platform";
 import { EntityIcon } from "../EntityIcon";
 import { DropdownMenu } from "../Toolbar";
-import { ArrowLeft, Copy, External, FileText, Plus, Trash } from "../icons";
+import { ArrowLeft, Copy, External, FileText, Plus, Trash, Upload } from "../icons";
 import { Empty, Loading, PageHeader, Select, usePage } from "./common";
 
 export function TemplatesPage() {
@@ -211,13 +212,158 @@ function TemplateEditor({ id, onBack }: { id: string; onBack: () => void }) {
 
 const EMOJI_NAME = /^[a-z0-9_]+$/;
 
+/** Largest emoji image accepted (they're shown at text size). */
+const EMOJI_MAX_BYTES = 1024 * 1024;
+const EMOJI_TYPES = ["image/png", "image/gif", "image/jpeg", "image/webp", "image/svg+xml"];
+
+/** "Party Parrot (1).gif" → "party_parrot_1" */
+const emojiNameFrom = (file: string) =>
+  file
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+
+type EmojiStep = "choose" | "upload" | "name";
+
+/** Adding a custom emoji, in three steps: choose an image, upload it, name it. */
+function NewEmojiDialog({ taken, onClose, onAdded }: { taken: Set<string>; onClose: () => void; onAdded: (emoji: CustomEmoji) => void }) {
+  const { t } = useSettings();
+  const [step, setStep] = useState<EmojiStep>("choose");
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+
+  const start = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    if (!EMOJI_TYPES.includes(file.type)) return setError(t("emojiWrongType"));
+    if (file.size > EMOJI_MAX_BYTES) return setError(t("emojiTooBig"));
+    setPreview(URL.createObjectURL(file));
+    setName((n) => n || emojiNameFrom(file.name));
+    setStep("upload");
+    setProgress(isTauri ? null : 0);
+    try {
+      setAttachment(await uploadFile(file, "emoji", undefined, isTauri ? undefined : setProgress));
+      setStep("name");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStep("choose");
+    }
+  };
+
+  const nameOk = EMOJI_NAME.test(name);
+  const nameTaken = taken.has(name);
+  const add = async () => {
+    if (!attachment || !nameOk || nameTaken) return;
+    setBusy(true);
+    try {
+      onAdded(await createEmoji(name, attachment.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+
+  const steps: [EmojiStep, string][] = [
+    ["choose", t("emojiStepChoose")],
+    ["upload", t("emojiStepUpload")],
+    ["name", t("emojiStepName")],
+  ];
+  const at = steps.findIndex(([s]) => s === step);
+
+  return (
+    <Dialog title={t("addEmoji")} onClose={onClose}>
+      <ol className="steps">
+        {steps.map(([s, label], i) => (
+          <li key={s} className={i < at ? "done" : i === at ? "current" : ""}>
+            <span className="step-dot">{i < at ? "✓" : i + 1}</span>
+            {label}
+          </li>
+        ))}
+      </ol>
+
+      {step === "choose" && (
+        <button
+          type="button"
+          className={`emoji-dropzone${dragging ? " dragging" : ""}`}
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            void start(e.dataTransfer.files[0]);
+          }}
+        >
+          <Upload size={22} />
+          <strong>{t("emojiDrop")}</strong>
+          <span className="settings-hint">{t("emojiDropHint")}</span>
+          <input ref={input} type="file" accept={EMOJI_TYPES.join(",")} hidden onChange={(e) => void start(e.target.files?.[0])} />
+        </button>
+      )}
+
+      {step === "upload" && (
+        <div className="emoji-uploading">
+          {preview && <img src={preview} alt="" />}
+          <div className={`progress${progress === null ? " indeterminate" : ""}`} role="progressbar" aria-valuenow={progress === null ? undefined : Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
+            <span style={progress === null ? undefined : { width: `${Math.round(progress * 100)}%` }} />
+          </div>
+          <span className="settings-hint">{progress === null ? t("uploading") : t("uploadingPercent", { n: Math.round(progress * 100) })}</span>
+        </div>
+      )}
+
+      {step === "name" && (
+        <form
+          className="settings-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+        >
+          <div className="emoji-naming">
+            {preview && <img src={preview} alt="" />}
+            <label className="emoji-name">
+              <span className="muted">:</span>
+              <input className="text-field mono" autoFocus value={name} maxLength={50} placeholder="party_parrot" onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "_"))} />
+              <span className="muted">:</span>
+            </label>
+          </div>
+          <span className="settings-hint">{name && !nameOk ? t("emojiInvalidName") : nameTaken ? t("emojiNameTaken") : t("emojiNameHint", { name: name || "name" })}</span>
+          <div className="dialog-actions">
+            <button type="button" className="text-button" onClick={onClose}>
+              {t("cancel")}
+            </button>
+            <button className="primary-button" disabled={busy || !nameOk || nameTaken}>
+              {t("addEmoji")}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {error && <p className="error-text small">{error}</p>}
+    </Dialog>
+  );
+}
+
 export function EmojisPage() {
   const { t } = useSettings();
   const { me, teamCan, flash, onError } = usePage();
   const [env, setEnv] = useState<Envelope<CustomEmoji[]> | null>(null);
-  const [image, setImage] = useState<{ attachment: Attachment; preview: string } | null>(null);
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<CustomEmoji | null>(null);
 
   const load = () => listEmojis().then(setEnv, onError);
@@ -225,57 +371,19 @@ export function EmojisPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const pick = async () => {
-    try {
-      const attachment = await chooseAndUploadImage("emoji");
-      if (!attachment) return;
-      setImage({ attachment, preview: resolveUrl(attachment.url) });
-      if (!name) setName(attachment.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, ""));
-    } catch (e) {
-      onError(e);
-    }
-  };
-  const nameOk = EMOJI_NAME.test(name);
   const emojis = env?.data ?? [];
 
   return (
     <>
-      <PageHeader title={t("emojis")} hint={t("emojisHint")} />
-      {teamCan("createEmoji") && (
-        <form
-          className="emoji-form"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!image || !nameOk) return;
-            setBusy(true);
-            try {
-              await createEmoji(name, image.attachment.id);
-              flash(t("emojiAdded"));
-              setImage(null);
-              setName("");
-              void load();
-            } catch (err) {
-              onError(err);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <button type="button" className="emoji-drop" onClick={() => void pick()} title={t("chooseImage")}>
-            {image ? <img src={image.preview} alt="" /> : <Plus size={18} />}
-          </button>
-          <label className="emoji-name">
-            <span className="muted">:</span>
-            <input className="text-field" placeholder="party_parrot" value={name} maxLength={100} onChange={(e) => setName(e.target.value.toLowerCase())} />
-            <span className="muted">:</span>
-          </label>
-          <button className="primary-button" disabled={busy || !image || !nameOk}>
+      <PageHeader title={t("emojis")} hint={t("emojisHint")}>
+        {teamCan("createEmoji") && (
+          <button className="primary-button" onClick={() => setAdding(true)}>
+            <Plus size={14} />
             {t("addEmoji")}
           </button>
-          {name && !nameOk && <span className="error-text small">{t("emojiInvalidName")}</span>}
-        </form>
-      )}
+        )}
+      </PageHeader>
+      {emojis.length > 0 && <p className="settings-hint emoji-usage">{t("emojiUsage")}</p>}
       {!env ? (
         <Loading />
       ) : emojis.length === 0 ? (
@@ -294,6 +402,17 @@ export function EmojisPage() {
             </div>
           ))}
         </div>
+      )}
+      {adding && (
+        <NewEmojiDialog
+          taken={new Set(emojis.map((e) => e.name))}
+          onClose={() => setAdding(false)}
+          onAdded={(e) => {
+            setAdding(false);
+            flash(t("emojiAddedHowTo", { name: e.name }));
+            void load();
+          }}
+        />
       )}
       {deleting && (
         <ConfirmDialog

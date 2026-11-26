@@ -286,6 +286,10 @@ kbd {
 .primary-button {
   height: var(--control-h);
   padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border-radius: 6px;
   background: var(--primary);
   color: var(--on-primary);

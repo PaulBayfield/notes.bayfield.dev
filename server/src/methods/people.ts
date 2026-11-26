@@ -8,7 +8,7 @@ import { forbidden, invalid, notFound } from "../http.ts";
 import { notify } from "../notify.ts";
 import { teamPolicy, userPolicy } from "../policies.ts";
 import { DOC_COLUMNS, presentDocuments, presentGroup, presentTeam, presentUser, usersById, type DocumentRow, type GroupRow } from "../presenters.ts";
-import { method, type SignedInCall } from "../rpc.ts";
+import { method, publicMethod, type SignedInCall } from "../rpc.ts";
 import { createUser, teamById, forgetTeam, getUser, type TeamRow, type UserRole, type UserRow } from "../users.ts";
 import { page } from "./common.ts";
 
@@ -476,6 +476,18 @@ async function presentEmojis(rows: EmojiRow[]) {
     createdAt: e.createdAt.toISOString(),
   }));
 }
+
+/**
+ * A custom emoji's image by its id (how documents store them): a redirect to the public file. Public,
+ * like the file itself, so shared pages show them too.
+ */
+publicMethod("emojis.redirect", async ({ c, params }) => {
+  const id = params.uuid("id", { required: true })!;
+  const [e] = await sql<{ key: string | null }[]>`
+    SELECT a.key FROM emojis e JOIN attachments a ON a.id = e.attachment_id WHERE e.id = ${id} AND e.team_id = ${c.get("team").id}`;
+  if (!e?.key) throw notFound();
+  return new Response(null, { status: 302, headers: { Location: `/api/files.get?key=${encodeURIComponent(e.key)}`, "Cache-Control": "public, max-age=3600" } });
+});
 
 method("emojis.list", async (call) => {
   const { limit, offset } = call.params.pagination();

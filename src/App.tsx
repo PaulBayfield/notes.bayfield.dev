@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import type { EditorView } from "prosemirror-view";
-import { AuthError, createDocument, type Team, moveCollection, moveDocument, moveStar, publishDocument, usersByIds, type Doc, type User } from "./lib/api";
+import { AuthError, createDocument, type Team, listEmojis, moveCollection, moveDocument, moveStar, publishDocument, resolveUrl, usersByIds, type Doc, type User } from "./lib/api";
+import { onRealtime } from "./lib/realtime";
+import { setCustomEmoji } from "./editor/emoji";
 import { refreshCollaborationToken, restoreSession, signOut, type Session } from "./lib/auth";
 import { isMac, isTauri, openExternal } from "./lib/platform";
 import { canInstallUpdates, installStatus, useInstallUpdate, useUpdateCheck } from "./lib/updates";
@@ -206,6 +208,16 @@ function NotesApp({
   );
 
   const workspace = useWorkspace(onError);
+
+  // The workspace's custom emoji, for the editor (kept current as people add or remove them).
+  useEffect(() => {
+    const load = () =>
+      listEmojis()
+        .then((r) => setCustomEmoji(r.data.map((e) => ({ id: e.id, name: e.name })), (path) => resolveUrl(path)))
+        .catch(() => {});
+    void load();
+    return onRealtime(({ event }) => event.startsWith("emojis.") && void load());
+  }, []);
   const updates = useUpdateCheck();
   const installer = useInstallUpdate();
   const newRelease = updates.state.status === "available" && updates.state.release.version !== settings.skippedUpdate ? updates.state.release : null;

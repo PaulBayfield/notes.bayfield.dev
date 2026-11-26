@@ -8,7 +8,7 @@
 
 import { Schema, type DOMOutputSpec, type MarkSpec, type Node, type NodeSpec } from "prosemirror-model";
 import { mathSchemaSpec } from "@benrbray/prosemirror-math";
-import { emojiFor } from "./emoji";
+import { customEmojiName, customEmojiSrc, emojiFor, isCustomEmoji } from "./emoji";
 import { dateLong } from "./dates";
 
 /** The editor version sent to Outline; the server refuses clients a major version behind. */
@@ -126,7 +126,13 @@ const nodes: Record<string, NodeSpec> = {
         getAttrs: (dom: HTMLElement) => (dom.dataset.name ? { "data-name": dom.dataset.name } : false),
       },
     ],
-    toDOM: (node) => ["strong", { class: "emoji", "data-name": node.attrs["data-name"] }, emojiFor(node.attrs["data-name"])],
+    toDOM: (node) => {
+      const name = node.attrs["data-name"];
+      // A custom emoji: its image, named in its alt text.
+      if (isCustomEmoji(name))
+        return ["strong", { class: "emoji custom", "data-name": name }, ["img", { src: customEmojiSrc(name), alt: `:${customEmojiName(name) ?? "emoji"}:`, class: "custom-emoji", draggable: "false" }]];
+      return ["strong", { class: "emoji", "data-name": name }, emojiFor(name)];
+    },
     leafText: (node) => emojiFor(node.attrs["data-name"]),
   },
 

@@ -2915,3 +2915,131 @@ textarea.text-field {
   color: var(--text-faint);
   padding: 0 8px 6px;
 }
+
+/* Custom emoji: in documents, menus and pickers */
+.custom-emoji {
+  height: 1.25em;
+  width: auto;
+  max-width: 3em;
+  vertical-align: -0.28em;
+  object-fit: contain;
+}
+.emoji.custom {
+  display: inline-block;
+}
+.menu-icon .custom-emoji,
+.emoji-cell .custom-emoji {
+  height: 20px;
+  vertical-align: middle;
+}
+
+/* Steps in a dialog (adding an emoji) */
+.steps {
+  display: flex;
+  gap: 18px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.steps li.current {
+  color: var(--text);
+  font-weight: 500;
+}
+.steps li.done {
+  color: var(--text-muted);
+}
+.step-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+}
+.steps li.current .step-dot {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.steps li.done .step-dot {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  border-color: transparent;
+  color: var(--success);
+}
+.emoji-dropzone {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.emoji-dropzone:hover,
+.emoji-dropzone.dragging {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: var(--text);
+}
+.emoji-uploading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0 8px;
+}
+.emoji-uploading img,
+.emoji-naming img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+.progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hover);
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 120ms linear;
+}
+.progress.indeterminate > span {
+  width: 35%;
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.emoji-naming {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.emoji-naming .emoji-name {
+  flex: 1;
+}
+.emoji-usage {
+  margin: -4px 0 12px;
+}

@@ -22,11 +22,44 @@ export function loadEmoji(): Promise<Record<string, string>> {
   return loading;
 }
 
+// ---------- Custom (uploaded) emoji: stored in documents by id, as Outline does ----------
+
+export interface CustomEmoji {
+  id: string;
+  name: string;
+}
+
+let custom: CustomEmoji[] = [];
+const customById = new Map<string, CustomEmoji>();
+/** The app turns a server path into a URL it can load (the desktop app goes through its proxy). */
+let resolve = (path: string) => path;
+
+export const isCustomEmoji = (name: string) => UUID.test(String(name ?? ""));
+
+/** The workspace's custom emoji, for the pickers and their names. */
+export function setCustomEmoji(list: CustomEmoji[], resolver?: (path: string) => string) {
+  custom = [...list].sort((a, b) => a.name.localeCompare(b.name));
+  customById.clear();
+  for (const e of custom) customById.set(e.id, e);
+  if (resolver) resolve = resolver;
+}
+
+export const customEmojiList = () => custom;
+export const customEmojiName = (id: string) => customById.get(id)?.name ?? null;
+/** A custom emoji's image, by id (works before the list has loaded). */
+export const customEmojiSrc = (id: string) => resolve(`/api/emojis.redirect?id=${encodeURIComponent(id)}`);
+
+/** Custom emoji whose name matches, for the ":" picker. */
+export function searchCustomEmoji(query: string, limit = 8): CustomEmoji[] {
+  const q = query.toLowerCase();
+  return [...custom.filter((e) => e.name.startsWith(q)), ...custom.filter((e) => !e.name.startsWith(q) && e.name.includes(q))].slice(0, limit);
+}
+
 /** The emoji for a shortcode, or the shortcode itself until the table has loaded. */
 export function emojiFor(name: string): string {
   const key = String(name ?? "").replace(/:/g, "");
-  // Custom (uploaded) emoji are stored by id; we don't render those, so show the shortcode form.
-  if (UUID.test(key)) return `:${key.slice(0, 8)}:`;
+  // Custom emoji are images (see the schema); as text, their name.
+  if (UUID.test(key)) return `:${customById.get(key)?.name ?? "emoji"}:`;
   return table?.[key] ?? `:${key}:`;
 }
 
