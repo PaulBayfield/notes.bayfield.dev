@@ -5,7 +5,7 @@ import type { Node } from "prosemirror-model";
 import type { EditorView, NodeView, NodeViewConstructor } from "prosemirror-view";
 import { createMathView } from "@benrbray/prosemirror-math";
 import { resolveUrl } from "../lib/api";
-import { emojiFor, emojiLoaded, loadEmoji } from "./emoji";
+import { customEmojiName, customEmojiSrc, emojiFor, emojiLoaded, isCustomEmoji, loadEmoji } from "./emoji";
 import { CODE_LANGUAGES } from "./codeLanguages";
 import { dateLabel, dateLong, PICK_DATE_EVENT, withDay, type PickDateRequest } from "./dates";
 import { pickableLanguages } from "./highlight";
@@ -413,7 +413,14 @@ class ImageView implements NodeView {
 }
 
 function emojiView(node: Node): NodeView {
-  const dom = el("span", { class: "emoji", "data-name": node.attrs["data-name"] }, emojiFor(node.attrs["data-name"]));
+  const name = node.attrs["data-name"];
+  if (isCustomEmoji(name)) {
+    // The workspace's own emoji: its image (stored by id, as Outline does).
+    const img = el("img", { class: "custom-emoji", src: customEmojiSrc(name), alt: `:${customEmojiName(name) ?? "emoji"}:`, draggable: "false" });
+    const dom = el("span", { class: "emoji custom", "data-name": name, title: `:${customEmojiName(name) ?? "emoji"}:` }, img);
+    return { dom, ignoreMutation: () => true };
+  }
+  const dom = el("span", { class: "emoji", "data-name": name }, emojiFor(name));
   if (!emojiLoaded()) void loadEmoji().then(() => (dom.textContent = emojiFor(node.attrs["data-name"])));
   return { dom, ignoreMutation: () => true };
 }
