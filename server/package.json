@@ -1,7 +1,7 @@
 {
   "name": "notes-server",
   "private": true,
-  "version": "0.17.0",
+  "version": "0.18.0",
   "type": "module",
   "description": "Notes server: an Outline-compatible API, collaboration and realtime server, and the web build",
   "engines": {
