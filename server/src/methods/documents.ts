@@ -22,7 +22,7 @@ import {
   type DocJSON,
   type NavNode,
 } from "../content.ts";
-import { publish } from "../events.ts";
+import { diff, publish } from "../events.ts";
 import { purgeDocuments } from "../housekeeping.ts";
 import { notify, subscribers } from "../notify.ts";
 import { forbidden, invalid, notFound } from "../http.ts";
@@ -375,7 +375,8 @@ method("documents.move", async (call) => {
     if (node && d.publishedAt && !d.archivedAt) await addToTree(tx, collectionId!, node, parentId, index);
   });
   const fresh = await reload(d.id);
-  publish({ name: "documents.move", data: { id: d.id, collectionId, collectionIds: [...new Set([d.collectionId, collectionId].filter(Boolean))] }, teamId: d.teamId, collectionId, documentId: d.id, actorId: call.user.id });
+  const moveChanges = diff({ collectionId: d.collectionId, parentDocumentId: d.parentDocumentId }, { collectionId, parentDocumentId: parentId }, ["collectionId", "parentDocumentId"]);
+  publish({ name: "documents.move", data: { id: d.id, collectionId, collectionIds: [...new Set([d.collectionId, collectionId].filter(Boolean))] }, teamId: d.teamId, collectionId, documentId: d.id, actorId: call.user.id, changes: moveChanges });
   const presented = await presentWithPolicies(a, [fresh]);
   const { presentCollection } = await import("../presenters.ts");
   const collections = await sql`SELECT * FROM collections WHERE id = ANY(${[...new Set([d.collectionId, collectionId].filter(Boolean))] as string[]}::uuid[])`;
@@ -592,7 +593,7 @@ method("documents.add_user", async (call) => {
     INSERT INTO user_memberships (user_id, document_id, permission, created_by_id) VALUES (${userId}, ${d.id}, ${permission}, ${call.user.id})
     ON CONFLICT (user_id, document_id) WHERE document_id IS NOT NULL DO UPDATE SET permission = excluded.permission, updated_at = now()
     RETURNING *`;
-  publish({ name: "documents.add_user", data: { userId, documentId: d.id, id: m.id }, teamId: d.teamId, documentId: d.id, userIds: [userId], actorId: call.user.id });
+  publish({ name: "documents.add_user", data: { userId, documentId: d.id, id: m.id, permission }, teamId: d.teamId, documentId: d.id, userIds: [userId], actorId: call.user.id });
   await notify(d.teamId, [userId], { event: "documents.add_user", actorId: call.user.id, documentId: d.id, collectionId: d.collectionId });
   return { data: { users: [presentUser(user)], memberships: [presentMembership(m)] } };
 });
@@ -628,7 +629,7 @@ method("documents.add_group", async (call) => {
     INSERT INTO group_memberships (group_id, document_id, permission, created_by_id) VALUES (${groupId}, ${d.id}, ${permission}, ${call.user.id})
     ON CONFLICT (group_id, document_id) WHERE document_id IS NOT NULL DO UPDATE SET permission = excluded.permission, updated_at = now()
     RETURNING *`;
-  publish({ name: "documents.add_group", data: { groupId, documentId: d.id }, teamId: d.teamId, documentId: d.id, actorId: call.user.id });
+  publish({ name: "documents.add_group", data: { groupId, documentId: d.id, permission }, teamId: d.teamId, documentId: d.id, actorId: call.user.id });
   return { data: { groups: [presentGroup(group)], groupMemberships: [presentGroupMembership(m)] } };
 });
 

@@ -10,6 +10,7 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { sql } from "./db.ts";
+import { currentRequest } from "./context.ts";
 
 export interface ChangeEvent {
   /** Outline's event name, e.g. "documents.update". */
@@ -22,6 +23,20 @@ export interface ChangeEvent {
   documentId?: string | null;
   userIds?: string[];
   actorId?: string | null;
+  /** For the events log: what changed, field by field (not sent to clients). */
+  changes?: Changes | null;
+}
+
+export type Changes = Record<string, { from: unknown; to: unknown }>;
+
+/** The fields that differ between two versions of a row, as the events log keeps them; null when none. */
+export function diff<T extends object>(before: T, after: T, fields: (keyof T)[]): Changes | null {
+  const out: Changes = {};
+  for (const f of fields) {
+    const [a, b] = [before[f] ?? null, after[f] ?? null];
+    if (JSON.stringify(a) !== JSON.stringify(b)) out[String(f)] = { from: a, to: b };
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 export const bus = new EventEmitter();
@@ -55,15 +70,23 @@ function record(e: ChangeEvent) {
   if (!LOGGED.has(e.name)) return;
   const modelId = typeof e.data.id === "string" && UUID.test(e.data.id) ? e.data.id : null;
   const userId = typeof e.data.userId === "string" && UUID.test(e.data.userId) ? e.data.userId : null;
+  // The request it came from: its address, its client, how it signed in.
+  const req = currentRequest();
   void sql`
-    INSERT INTO events (team_id, name, actor_id, user_id, model_id, collection_id, document_id, data)
-    VALUES (${e.teamId}, ${e.name}, ${e.actorId ?? null}, ${userId}, ${modelId}, ${e.collectionId ?? null}, ${e.documentId ?? null}, ${sql.json(e.data as never)})`.catch((err) => console.warn("Couldn't log an event:", err));
+    INSERT INTO events (team_id, name, actor_id, user_id, model_id, collection_id, document_id, data, changes, ip, user_agent, via)
+    VALUES (${e.teamId}, ${e.name}, ${e.actorId ?? null}, ${userId}, ${modelId}, ${e.collectionId ?? null}, ${e.documentId ?? null}, ${sql.json(e.data as never)},
+            ${e.changes ? sql.json(e.changes as never) : null}, ${req?.ip ?? null}, ${req?.userAgent ?? null}, ${req?.via ?? null})`.catch((err) => console.warn("Couldn't log an event:", err));
+}
+
+/** An entry in the events log only (no live update): people's roles, shared links… */
+export function audit(e: ChangeEvent) {
+  record(e);
 }
 
 export function publish(e: ChangeEvent) {
   bus.emit("change", e);
   record(e);
-  let payload = JSON.stringify({ from: INSTANCE, e });
+  let payload = JSON.stringify({ from: INSTANCE, e: { ...e, changes: undefined } });
   if (payload.length > MAX_PAYLOAD) {
     const ids = Object.fromEntries(Object.entries(e.data).filter(([k]) => k === "id" || k.endsWith("Id")));
     payload = JSON.stringify({ from: INSTANCE, e: { ...e, data: ids } });

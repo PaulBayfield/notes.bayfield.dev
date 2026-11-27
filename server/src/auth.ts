@@ -21,6 +21,7 @@ import { sql } from "./db.ts";
 import { randomToken, sha256 } from "./crypto.ts";
 import { ApiError, clientIp, unauthenticated } from "./http.ts";
 import { createUser, getUser, teamById, teamUrl, type TeamRow, type UserRow } from "./users.ts";
+import { currentRequest } from "./context.ts";
 
 export interface Caller {
   user: UserRow;
@@ -125,6 +126,8 @@ export async function identify(c: Context<AppEnv>): Promise<Caller | null> {
     if (caller.via === "cookie") return null;
     throw unauthenticated("This token belongs to another workspace");
   }
+  const req = currentRequest();
+  if (req && caller) req.via = caller.via;
   return caller;
 }
 

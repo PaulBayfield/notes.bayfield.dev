@@ -3,7 +3,7 @@
 
 import { sql } from "../db.ts";
 import { Access } from "../access.ts";
-import { publish } from "../events.ts";
+import { audit, diff, publish, type Changes } from "../events.ts";
 import { forbidden, invalid, notFound } from "../http.ts";
 import { notify } from "../notify.ts";
 import { teamPolicy, userPolicy } from "../policies.ts";
@@ -69,6 +69,7 @@ method("users.update_role", async (call) => {
   if (!role) throw invalid("role is required");
   const [updated] = await sql<UserRow[]>`UPDATE users SET role = ${role}, updated_at = now() WHERE id = ${u.id} RETURNING *`;
   publish({ name: "users.update", data: { id: u.id }, teamId: u.teamId, userIds: [u.id], actorId: call.user.id });
+  audit({ name: "users.update_role", data: { userId: u.id, name: u.name }, teamId: u.teamId, actorId: call.user.id, changes: diff(u, updated, ["role"]) });
   return { data: presentUser(updated, { includeDetails: true }), policies: [userPolicy(call.user, updated)] };
 });
 // Outline's older names for the same thing.
@@ -76,6 +77,7 @@ method("users.promote", async (call) => {
   call.params.raw.role = "admin";
   const u = await adminTarget(call);
   const [updated] = await sql<UserRow[]>`UPDATE users SET role = 'admin', updated_at = now() WHERE id = ${u.id} RETURNING *`;
+  audit({ name: "users.update_role", data: { userId: u.id, name: u.name }, teamId: u.teamId, actorId: call.user.id, changes: diff(u, updated, ["role"]) });
   return { data: presentUser(updated, { includeDetails: true }), policies: [userPolicy(call.user, updated)] };
 });
 
@@ -84,12 +86,14 @@ method("users.suspend", async (call) => {
   if (u.id === call.user.id) throw invalid("You can't suspend yourself");
   const [updated] = await sql<UserRow[]>`UPDATE users SET suspended_at = now(), suspended_by_id = ${call.user.id}, updated_at = now() WHERE id = ${u.id} RETURNING *`;
   await sql`DELETE FROM sessions WHERE user_id = ${u.id}`;
+  audit({ name: "users.suspend", data: { userId: u.id, name: u.name }, teamId: u.teamId, actorId: call.user.id });
   return { data: presentUser(updated, { includeDetails: true }), policies: [userPolicy(call.user, updated)] };
 });
 
 method("users.activate", async (call) => {
   const u = await adminTarget(call);
   const [updated] = await sql<UserRow[]>`UPDATE users SET suspended_at = NULL, suspended_by_id = NULL, updated_at = now() WHERE id = ${u.id} RETURNING *`;
+  audit({ name: "users.activate", data: { userId: u.id, name: u.name }, teamId: u.teamId, actorId: call.user.id });
   return { data: presentUser(updated, { includeDetails: true }), policies: [userPolicy(call.user, updated)] };
 });
 
@@ -109,6 +113,7 @@ method("users.invite", async (call) => {
     const role = (ROLES as readonly unknown[]).includes(i.role) && (call.user.role === "admin" || i.role !== "admin") ? (i.role as UserRole) : team.defaultUserRole;
     sent.push(await createUser({ teamId: team.id, name: typeof i.name === "string" && i.name.trim() ? i.name.trim() : email.split("@")[0], email, avatarUrl: null, role, invitedById: call.user.id }));
   }
+  for (const u of sent) audit({ name: "users.invite", data: { userId: u.id, name: u.name, email: u.email, role: u.role }, teamId: team.id, actorId: call.user.id });
   return { data: { sent: sent.map((u) => ({ email: u.email, name: u.name, role: u.role })), users: sent.map((u) => presentUser(u, { includeDetails: true })) } };
 });
 
@@ -137,6 +142,7 @@ method("users.delete", async (call) => {
     await tx`DELETE FROM sessions WHERE user_id = ${u.id}`;
     await tx`DELETE FROM user_authentications WHERE user_id = ${u.id}`;
   });
+  audit({ name: "users.delete", data: { userId: u.id, name: u.name, self: u.id === call.user.id }, teamId: u.teamId, actorId: call.user.id });
   return { success: true };
 });
 
@@ -169,7 +175,15 @@ method("teams.update", async (call) => {
       updated_at = now()
     WHERE id = ${t.id} RETURNING *`;
   forgetTeam(t.id);
-  publish({ name: "teams.update", data: { id: t.id }, teamId: t.id, actorId: call.user.id });
+  // What changed, preferences one by one.
+  const changes: Changes = {
+    ...diff(t, updated, ["name", "description", "avatarUrl", "sharing", "memberCollectionCreate", "documentEmbeds", "guestSignin", "inviteRequired", "defaultUserRole", "allowedDomains", "defaultCollectionId"]),
+  };
+  const before = (t.preferences ?? {}) as Record<string, unknown>;
+  const after = (updated.preferences ?? {}) as Record<string, unknown>;
+  for (const k of new Set([...Object.keys(before), ...Object.keys(after)]))
+    if (JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null)) changes[`preferences.${k}`] = { from: before[k] ?? null, to: after[k] ?? null };
+  publish({ name: "teams.update", data: { id: t.id, name: updated.name }, teamId: t.id, actorId: call.user.id, changes: Object.keys(changes).length ? changes : null });
   return { data: presentTeam(updated), policies: [teamPolicy(call.user, updated)] };
 });
 
@@ -234,7 +248,7 @@ method("groups.update", async (call) => {
       icon = ${p.has("icon") ? (p.nullableString("icon", 50) ?? null) : g.icon}, color = ${p.has("color") ? (p.nullableString("color", 20) ?? null) : g.color},
       disable_mentions = ${p.boolean("disableMentions") ?? g.disableMentions}, updated_at = now()
     WHERE id = ${g.id} RETURNING *, ${g.memberCount ?? 0}::int AS member_count`;
-  publish({ name: "groups.update", data: { id: g.id }, teamId: call.user.teamId, actorId: call.user.id });
+  publish({ name: "groups.update", data: { id: g.id, name: u.name }, teamId: call.user.teamId, actorId: call.user.id, changes: diff(g, u, ["name", "description", "disableMentions"]) });
   return { data: presentGroup(u), policies: [groupPolicy(call, await teamById(call.user.teamId), u)] };
 });
 

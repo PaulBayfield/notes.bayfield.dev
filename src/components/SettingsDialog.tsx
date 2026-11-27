@@ -12,7 +12,8 @@ import { AboutPage, NotificationsPage, PreferencesPage, ProfilePage } from "./se
 import { DetailsPage, ExportPage, SecurityPage } from "./settings/WorkspacePages";
 import { GroupsPage, UsersPage } from "./settings/PeoplePages";
 import { EmojisPage, SharesPage, TemplatesPage } from "./settings/ContentPages";
-import { ApiKeysPage, ApplicationsPage, AuditLogPage, ConnectedAppsPage, McpPage } from "./settings/IntegrationPages";
+import { ApiKeysPage, ApplicationsPage, ConnectedAppsPage, McpPage } from "./settings/IntegrationPages";
+import { AuditLogPage } from "./settings/AuditLog";
 
 export const SHORTCUTS: { keys: string[]; label: StringKey }[] = [
   { keys: [`${mod}+K`], label: "scSearch" },

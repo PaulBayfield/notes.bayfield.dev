@@ -36,6 +36,14 @@ export function scheduleHousekeeping() {
     for (const f of expired) if (f.key) await remove(f.key).catch(() => {});
   });
 
+  // The events log, as long as each workspace keeps it (preferences.auditRetentionDays; unset: forever).
+  schedule("events", 24 * 60 * 60_000, async () => {
+    await sql`
+      DELETE FROM events e USING teams t
+      WHERE e.team_id = t.id AND (t.preferences->>'auditRetentionDays') ~ '^[0-9]+$' AND (t.preferences->>'auditRetentionDays')::int > 0
+        AND e.created_at < now() - make_interval(days => (t.preferences->>'auditRetentionDays')::int)`;
+  });
+
   schedule("leftovers", 6 * 60 * 60_000, async () => {
     // Uploads reserved and never sent.
     const abandoned = await sql<{ key: string }[]>`DELETE FROM attachments WHERE uploaded_at IS NULL AND created_at < ${new Date(Date.now() - DAY)} RETURNING key`;

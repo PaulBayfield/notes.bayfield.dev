@@ -14,6 +14,7 @@ import type { PMNode } from "../markdown.ts";
 import { collectionPolicy, documentPolicy } from "../policies.ts";
 import { DOC_COLUMNS, presentUser, usersById, type DocumentRow } from "../presenters.ts";
 import { method } from "../rpc.ts";
+import { audit, diff, type Changes } from "../events.ts";
 import { disposition, exists, open } from "../storage.ts";
 import { teamById, teamUrl, type TeamRow } from "../users.ts";
 import { collectionFor, documentFor, page } from "./common.ts";
@@ -88,6 +89,10 @@ async function present(rows: ShareRow[]) {
 
 const atLeastAdmin = (a: Access, collectionId: string) => a.isAdmin || a.collection(collectionId) === "admin";
 
+/** Shared links in the events log (they aren't live updates). */
+const logShare = (name: string, s: ShareRow, actorId: string, changes?: Changes | null) =>
+  audit({ name, data: { id: s.id, published: s.published, collectionShare: !s.documentId }, teamId: s.teamId, documentId: s.documentId, collectionId: s.collectionId, actorId, changes });
+
 const sharePolicy = (s: ShareRow, canEdit: boolean) => ({ id: s.id, abilities: { read: true, update: canEdit, revoke: canEdit } });
 
 /** The document's own share, and an ancestor's that covers it (includeChildDocuments). */
@@ -135,6 +140,7 @@ method("shares.create", async (call) => {
     } else if (published !== undefined && published !== s.published) {
       [s] = await sql<ShareRow[]>`UPDATE shares SET published = ${published}, updated_at = now() WHERE id = ${s.id} RETURNING *`;
     }
+    logShare("shares.create", s, call.user.id);
     return { data: (await present([s]))[0], policies: [sharePolicy(s, true)] };
   }
   const d = await documentFor(a, call.params.uuid("documentId", { required: true }));
@@ -149,6 +155,7 @@ method("shares.create", async (call) => {
   } else if (published !== undefined && published !== s.published) {
     [s] = await sql<ShareRow[]>`UPDATE shares SET published = ${published}, updated_at = now() WHERE id = ${s.id} RETURNING *`;
   }
+  logShare("shares.create", s, call.user.id);
   return { data: (await present([s]))[0], policies: [sharePolicy(s, true)] };
 });
 
@@ -172,6 +179,7 @@ method("shares.update", async (call) => {
       title = ${p.has("title") ? (p.nullableString("title", 255) ?? null) : s.title},
       expires_at = ${p.has("expiresAt") ? (p.raw.expiresAt ? new Date(String(p.raw.expiresAt)) : null) : s.expiresAt}, updated_at = now()
     WHERE id = ${s.id} RETURNING *`;
+  logShare("shares.update", u, call.user.id, diff(s, u, ["published", "includeChildDocuments", "allowIndexing", "showLastUpdated", "showToc", "urlId", "title", "expiresAt"]));
   return { data: (await present([u]))[0], policies: [sharePolicy(u, true)] };
 });
 
@@ -185,6 +193,7 @@ method("shares.revoke", async (call) => {
     else if (!s.collectionId || !atLeastAdmin(a, s.collectionId)) throw forbidden();
   }
   await sql`UPDATE shares SET revoked_at = now(), revoked_by_id = ${call.user.id} WHERE id = ${s.id}`;
+  logShare("shares.revoke", s, call.user.id);
   return { success: true };
 });
 

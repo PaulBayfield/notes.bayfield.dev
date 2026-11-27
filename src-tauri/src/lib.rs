@@ -52,6 +52,12 @@ struct SessionInfo {
     server: String,
 }
 
+
+/// Who's calling, for the server's events log: "Notes-Desktop/0.19.0 (windows)".
+fn user_agent() -> String {
+    format!("Notes-Desktop/{} ({})", env!("CARGO_PKG_VERSION"), std::env::consts::OS)
+}
+
 struct AppState {
     session: RwLock<Option<Session>>,
     /// The server a sign-in is in progress for, until its `outline://` link comes back.
@@ -351,6 +357,7 @@ async fn exchange_token(app: &AppHandle, token: &str) -> Result<(), String> {
     exchange.query_pairs_mut().append_pair("token", token);
     // Outline answers with a redirect that sets the `accessToken` cookie: read it, don't follow.
     let client = reqwest::Client::builder()
+        .user_agent(user_agent())
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(err)?;
@@ -795,7 +802,7 @@ pub fn run() {
         .manage(AppState {
             session: RwLock::new(load_session()),
             pending: Mutex::new(None),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder().user_agent(user_agent()).build().expect("HTTP client"),
             realtime: Mutex::new(None),
         })
         .register_asynchronous_uri_scheme_protocol("notes", |ctx, request, responder| {

@@ -63,7 +63,7 @@ method("apiKeys.create", async ({ params, user, caller }) => {
     INSERT INTO api_keys (user_id, name, hash, last4, scope, expires_at)
     VALUES (${user.id}, ${name}, ${sha256(value)}, ${value.slice(-4)}, ${scope?.length ? scope : null}, ${expiresAt})
     RETURNING *`;
-  publish({ name: "apiKeys.create", data: { id: k.id, userId: user.id, name: k.name }, teamId: user.teamId, userIds: [user.id], actorId: user.id });
+  publish({ name: "apiKeys.create", data: { id: k.id, userId: user.id, name: k.name, scope: k.scope, expiresAt: k.expiresAt }, teamId: user.teamId, userIds: [user.id], actorId: user.id });
   return { data: present(k, value), policies: [policy(k)] };
 });
 

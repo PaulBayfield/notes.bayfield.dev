@@ -70,6 +70,14 @@ export const mcpUrl = (team: Team) => `${(team.url || getServer()).replace(/\/+$
 
 // ---------- Events ----------
 
+export interface EventChange {
+  from: unknown;
+  to: unknown;
+  /** The name behind an id (a collection, a document), when the change holds one. */
+  fromLabel?: string;
+  toLabel?: string;
+}
+
 export interface WorkspaceEvent {
   id: string;
   name: string;
@@ -77,15 +85,39 @@ export interface WorkspaceEvent {
   actorId: string | null;
   actor: User | null;
   userId: string | null;
+  /** The person the action was about (added to a group, whose role changed…). */
+  user: User | null;
   collectionId: string | null;
+  collection: { id: string; name: string; url: string; deleted: boolean } | null;
   documentId: string | null;
+  document: { id: string; title: string; url: string; deleted: boolean } | null;
+  group: { id: string; name: string } | null;
   data: Record<string, unknown> | null;
+  /** What changed, field by field. */
+  changes: Record<string, EventChange> | null;
+  /** The audit log only: where the action came from. */
   actorIpAddress?: string | null;
+  client?: string | null;
+  userAgent?: string | null;
+  /** How they were signed in: cookie (web), bearer (desktop), apiKey, oauth. */
+  via?: string | null;
   createdAt: string;
 }
 
-export const listEvents = (opts: { auditLog?: boolean; documentId?: string; collectionId?: string; actorId?: string; events?: string[]; limit?: number; offset?: number }) =>
-  call<WorkspaceEvent[]>("events.list", { limit: 50, ...opts }).then((r) => r.data);
+export interface EventFilters {
+  auditLog?: boolean;
+  documentId?: string;
+  collectionId?: string;
+  actorId?: string;
+  events?: string[];
+  /** ISO dates: from (inclusive) and until (exclusive). */
+  since?: string;
+  until?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const listEvents = (filters: EventFilters) => call<WorkspaceEvent[]>("events.list", { limit: 50, ...filters }).then((r) => r.data);
 
 // ---------- Search history ----------
 

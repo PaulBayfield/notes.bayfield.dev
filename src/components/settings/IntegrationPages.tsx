@@ -11,7 +11,6 @@ import {
   disconnectApp,
   listApiKeys,
   listConnections,
-  listEvents,
   listOAuthClients,
   mcpUrl,
   rotateOAuthSecret,
@@ -19,7 +18,6 @@ import {
   type ApiKey,
   type OAuthClient,
   type OAuthClientInput,
-  type WorkspaceEvent,
 } from "../../lib/integrations";
 import { updateTeam } from "../../lib/api";
 import { useSettings } from "../../lib/settings";
@@ -632,80 +630,6 @@ export function ApplicationsPage() {
           }}
         />
       )}
-    </>
-  );
-}
-
-// ---------- Audit log (admins) ----------
-
-const EVENT_GROUPS: [string, string[] | null][] = [
-  ["all", null],
-  ["documents", ["documents.create", "documents.publish", "documents.unpublish", "documents.archive", "documents.restore", "documents.delete", "documents.permanent_delete", "documents.move"]],
-  ["collections", ["collections.create", "collections.update", "collections.delete", "collections.archive", "collections.restore", "collections.move"]],
-  ["access", ["collections.add_user", "collections.remove_user", "collections.add_group", "collections.remove_group", "documents.add_user", "documents.remove_user", "documents.add_group", "documents.remove_group"]],
-  ["people", ["users.create", "users.update_role", "users.suspend", "users.activate", "users.delete", "users.invite", "groups.create", "groups.update", "groups.delete", "groups.add_user", "groups.remove_user"]],
-  ["sharing", ["shares.create", "shares.update", "shares.revoke"]],
-  ["security", ["apiKeys.create", "apiKeys.delete", "teams.update", "teams.create"]],
-];
-
-export function AuditLogPage() {
-  const { t, f } = useSettings();
-  const [group, setGroup] = useState("all");
-  const [pages, setPages] = useState(1);
-  const events = EVENT_GROUPS.find(([g]) => g === group)?.[1] ?? undefined;
-  const { data } = useLoad(() => listEvents({ auditLog: true, events, limit: 50 * pages }), [group, pages]);
-
-  const describe = (e: WorkspaceEvent) => {
-    const key = `ev_${e.name.replace(".", "_")}` as StringKey;
-    const label = t(key) as string | undefined;
-    return label && label !== key ? label : e.name;
-  };
-  const subject = (e: WorkspaceEvent) => {
-    const d = e.data ?? {};
-    return [d.title, d.name].find((v) => typeof v === "string") as string | undefined;
-  };
-
-  return (
-    <>
-      <PageHeader title={t("auditLog")} hint={t("auditLogHint")}>
-        <Select
-          value={group}
-          options={EVENT_GROUPS.map(([g]): [string, string] => [g, t(`evGroup_${g}` as StringKey)])}
-          onChange={(g) => {
-            setGroup(g);
-            setPages(1);
-          }}
-        />
-      </PageHeader>
-      <section className="settings-rows">
-        {!data ? (
-          <Loading />
-        ) : data.length === 0 ? (
-          <Empty>{t("noEvents")}</Empty>
-        ) : (
-          <div className="settings-list">
-            {data.map((e) => (
-              <div key={e.id} className="settings-item">
-                <Avatar user={e.actor ?? { name: "?", color: "var(--text-muted)", avatarUrl: null }} size={24} />
-                <div className="settings-item-text">
-                  <span className="settings-item-title">
-                    <strong>{e.actor?.name ?? t("someone")}</strong> {describe(e)}
-                    {subject(e) ? ` · ${subject(e)}` : ""}
-                  </span>
-                  <span className="settings-hint">{[f.relative(e.createdAt), e.actorIpAddress].filter(Boolean).join(" · ")}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {data && data.length >= 50 * pages && (
-          <div className="dialog-actions">
-            <button className="text-button" onClick={() => setPages((p) => p + 1)}>
-              {t("loadMore")}
-            </button>
-          </div>
-        )}
-      </section>
     </>
   );
 }

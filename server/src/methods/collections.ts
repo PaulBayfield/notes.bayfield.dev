@@ -4,7 +4,7 @@ import fractionalIndex from "fractional-index";
 import { sql } from "../db.ts";
 import { Access } from "../access.ts";
 import { checkDoc, markdownToDoc, newUrlId } from "../content.ts";
-import { publish } from "../events.ts";
+import { diff, publish } from "../events.ts";
 import { notify } from "../notify.ts";
 import { forbidden, invalid, notFound } from "../http.ts";
 import { toMarkdown, type PMNode } from "../markdown.ts";
@@ -119,7 +119,8 @@ method("collections.update", async (call) => {
       template_management = ${p.string("templateManagement") ?? c.templateManagement},
       updated_at = now()
     WHERE id = ${c.id} RETURNING *`;
-  publish({ name: "collections.update", data: { id: c.id }, teamId: c.teamId, collectionId: c.id, actorId: call.user.id });
+  const changes = diff(c, updated, ["name", "icon", "color", "permission", "sharing", "commenting"]);
+  publish({ name: "collections.update", data: { id: c.id, name: updated.name }, teamId: c.teamId, collectionId: c.id, actorId: call.user.id, changes });
   return present(call, updated, await Access.for(call.user));
 });
 
@@ -173,7 +174,7 @@ method("collections.add_user", async (call) => {
     INSERT INTO user_memberships (user_id, collection_id, permission, created_by_id) VALUES (${userId}, ${c.id}, ${permission}, ${call.user.id})
     ON CONFLICT (user_id, collection_id) WHERE collection_id IS NOT NULL DO UPDATE SET permission = excluded.permission, updated_at = now()
     RETURNING *`;
-  publish({ name: "collections.add_user", data: { userId, collectionId: c.id }, teamId: c.teamId, collectionId: c.id, userIds: [userId], actorId: call.user.id });
+  publish({ name: "collections.add_user", data: { userId, collectionId: c.id, permission }, teamId: c.teamId, collectionId: c.id, userIds: [userId], actorId: call.user.id });
   await notify(c.teamId, [userId], { event: "collections.add_user", actorId: call.user.id, collectionId: c.id });
   return { data: { users: [presentUser(user)], memberships: [presentMembership(m)] } };
 });
@@ -218,7 +219,7 @@ method("collections.add_group", async (call) => {
     INSERT INTO group_memberships (group_id, collection_id, permission, created_by_id) VALUES (${groupId}, ${c.id}, ${permission}, ${call.user.id})
     ON CONFLICT (group_id, collection_id) WHERE collection_id IS NOT NULL DO UPDATE SET permission = excluded.permission, updated_at = now()
     RETURNING *`;
-  publish({ name: "collections.add_group", data: { groupId, collectionId: c.id }, teamId: c.teamId, collectionId: c.id, actorId: call.user.id });
+  publish({ name: "collections.add_group", data: { groupId, collectionId: c.id, permission }, teamId: c.teamId, collectionId: c.id, actorId: call.user.id });
   return { data: { groups: [presentGroup(group)], groupMemberships: [presentGroupMembership(m)] } };
 });
 

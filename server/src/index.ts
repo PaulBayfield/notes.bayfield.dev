@@ -10,9 +10,10 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { DEV_LOGIN_USER, DIST_DIR, PORT, PUBLIC_URL, UPLOAD_MAX_SIZE, oidc } from "./config.ts";
 import { migrate, sql } from "./db.ts";
 import { authRoutes, cleanUpAuth, csrfCookie, desktopRedirectPage, type AppEnv } from "./auth.ts";
-import { ApiError } from "./http.ts";
+import { ApiError, clientIp } from "./http.ts";
 import { dispatch } from "./rpc.ts";
 import { defaultTeam, forgetTeam, teamForHost } from "./users.ts";
+import { requestContext } from "./context.ts";
 import { bus, listenToOtherInstances, type ChangeEvent } from "./events.ts";
 import { schedule, startJobs } from "./jobs.ts";
 import "./methods/auth.ts";
@@ -61,6 +62,9 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true });
 });
 app.get("/_health", (c) => c.text("OK"));
+
+// Each request's address and client, for the events log (see context.ts).
+app.use("*", (c, next) => requestContext.run({ ip: clientIp(c), userAgent: c.req.header("User-Agent")?.slice(0, 300) ?? null }, () => next()));
 
 // The workspace this address serves (the main address, a subdomain, a custom domain).
 app.use("*", async (c, next) => {

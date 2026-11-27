@@ -555,6 +555,10 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX search_queries_user ON search_queries (user_id, created_at DESC);
   `,
+  /* 6: the events log knows the client and how it signed in (the ip column was there already) */ `
+  ALTER TABLE events ADD COLUMN user_agent text;
+  ALTER TABLE events ADD COLUMN via text;
+  `,
 ];
 
 export async function migrate() {
