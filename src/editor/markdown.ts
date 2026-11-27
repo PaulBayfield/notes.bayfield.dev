@@ -10,7 +10,80 @@ import { languageId } from "./codeLanguages";
 
 const { nodes, marks } = schema;
 
+type BlockState = Parameters<Parameters<MarkdownIt["block"]["ruler"]["push"]>[1]>[0];
+type InlineState = Parameters<Parameters<MarkdownIt["inline"]["ruler"]["push"]>[1]>[0];
+
+/** Inline math: "$…$", "$$…$$" and "\(…\)". A "$" only opens before a non-space and only closes after
+ * a non-space when no digit follows, so prices like "$5 and $10" stay text. */
+function mathInline(state: InlineState, silent: boolean): boolean {
+  const { src, pos } = state;
+  const [open, close] = src.startsWith("\\(", pos) ? ["\\(", "\\)"] : src.startsWith("$$", pos) ? ["$$", "$$"] : src[pos] === "$" ? ["$", "$"] : [];
+  if (!open || !close) return false;
+  const from = pos + open.length;
+  if (open === "$" && (!src[from] || /\s/.test(src[from]))) return false;
+  let end = from;
+  for (;;) {
+    end = src.indexOf(close, end);
+    if (end === -1 || end >= state.posMax) return false;
+    const escaped = open !== "\\(" && src[end - 1] === "\\";
+    const loose = open === "$" && (/\s/.test(src[end - 1]) || /\d/.test(src[end + 1] ?? ""));
+    if (!escaped && !loose) break;
+    end++;
+  }
+  const content = src.slice(from, end).trim();
+  if (!content) return false;
+  if (!silent) {
+    const token = state.push("math_inline", "math", 0);
+    token.content = content;
+    token.markup = open;
+  }
+  state.pos = end + close.length;
+  return true;
+}
+
+/** Block math: "$$" … "$$" (on one line or several) and "\[" … "\]" each alone on its line. */
+function mathBlock(state: BlockState, startLine: number, endLine: number, silent: boolean): boolean {
+  if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+  const lineAt = (n: number) => state.src.slice(state.bMarks[n] + state.tShift[n], state.eMarks[n]);
+  const first = lineAt(startLine).trimEnd();
+  const dollars = first.startsWith("$$");
+  // "\[" is also an escaped bracket, so only a lone "\[" line opens a formula.
+  if (!dollars && first !== "\\[") return false;
+  const close = dollars ? "$$" : "\\]";
+  const rest = first.slice(2);
+  const body: string[] = [];
+  let last = startLine;
+  if (rest.includes(close)) {
+    // All on one line: only when the line is just the formula; otherwise it's inline math in a paragraph.
+    if (!rest.endsWith(close) || rest.indexOf(close) !== rest.length - close.length) return false;
+    body.push(rest.slice(0, -close.length));
+  } else {
+    if (rest.trim()) body.push(rest);
+    for (last = startLine + 1; ; last++) {
+      if (last >= endLine) return false;
+      const line = lineAt(last).trimEnd();
+      if (dollars ? line.endsWith(close) : line === close) {
+        body.push(line.slice(0, -close.length));
+        break;
+      }
+      body.push(line);
+    }
+  }
+  const content = body.join("\n").trim();
+  if (!content) return false;
+  if (silent) return true;
+  const token = state.push("math_block", "math", 0);
+  token.block = true;
+  token.content = content;
+  token.markup = dollars ? "$$" : "\\[";
+  token.map = [startLine, last + 1];
+  state.line = last + 1;
+  return true;
+}
+
 const md = new MarkdownIt("commonmark", { html: false, linkify: true, breaks: true }).enable(["table", "strikethrough", "linkify"]).use(markPlugin);
+md.inline.ruler.before("escape", "math_inline", mathInline);
+md.block.ruler.before("fence", "math_block", mathBlock, { alt: ["paragraph", "reference", "blockquote", "list"] });
 
 /** Does this plain text look like Markdown (rather than ordinary prose)? */
 export function looksLikeMarkdown(text: string): boolean {
@@ -108,6 +181,9 @@ function inline(tokens: Token[] = []): Node[] {
       case "image":
         out.push(nodes.image.create({ src: t.attrGet("src") ?? "", alt: t.content || null }));
         break;
+      case "math_inline":
+        out.push(nodes.math_inline.create(null, schema.text(t.content)));
+        break;
     }
   }
   return out;
@@ -146,6 +222,9 @@ function blocks(tokens: Token[], i: number, close?: string): [Node[], number] {
         );
         break;
       }
+      case "math_block":
+        out.push(nodes.math_block.create(null, schema.text(t.content)));
+        break;
       case "hr":
         out.push(nodes.hr.create({ markup: t.markup === "***" ? "***" : "---" }));
         break;

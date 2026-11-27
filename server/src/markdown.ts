@@ -17,7 +17,7 @@ const str = (v: unknown) => (typeof v === "string" ? v : v === null || v === und
 
 /** Characters that would start Markdown syntax in plain text. */
 function escape(text: string): string {
-  return text.replace(/([\\`*_~[\]#|<>])/g, "\\$1").replace(/^(\s*)([-+]|\d+\.)(\s)/gm, "$1\\$2$3");
+  return text.replace(/([\\`*_~[\]#|<>$])/g, "\\$1").replace(/^(\s*)([-+]|\d+\.)(\s)/gm, "$1\\$2$3");
 }
 
 function bytes(n: number): string {
