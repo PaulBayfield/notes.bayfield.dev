@@ -22,6 +22,7 @@ import { schema } from "./schema";
 import { suggestPlugin } from "./suggest";
 import { highlightPlugin } from "./highlight";
 import { selectionBoxesPlugin } from "./selection";
+import { imageBlocksPlugin } from "./imageBlocks";
 import { startComment } from "./comments";
 import { registerEditor } from "./registry";
 import { findPlugin } from "./find";
@@ -254,6 +255,7 @@ export function Editor(props: Props) {
           ...editorKeymaps(),
           mathPlugin,
           selectionBoxesPlugin(),
+          imageBlocksPlugin(),
           // Drag a column's right edge to resize it; widths are kept in the cells (`colwidth`), as in Outline.
           columnResizing({ cellMinWidth: 60, View: NotesTableView }),
           tableEditing(),
