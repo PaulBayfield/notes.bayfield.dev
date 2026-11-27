@@ -3113,3 +3113,103 @@ button.event-chip:hover {
 .audit-item .settings-item-meta {
   padding-top: 2px;
 }
+
+/* Audit log: an entry's details */
+.audit-item.clickable {
+  cursor: pointer;
+  border-radius: 6px;
+}
+.audit-item.clickable:hover,
+.audit-item.clickable:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+.event-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.event-sheet h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+}
+.event-field {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.event-field-label {
+  color: var(--text-muted);
+}
+.event-field-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.event-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.event-field code {
+  font-size: 12.5px;
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.event-field code.wrap {
+  white-space: normal;
+  word-break: break-all;
+}
+.event-changes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.event-changes th,
+.event-changes td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.event-changes th {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.event-changes td.before {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.event-changes td.after {
+  color: var(--success);
+}
+.event-raw summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.event-raw pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--code-bg);
+  font-size: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.event-raw .settings-form {
+  margin-top: 8px;
+}

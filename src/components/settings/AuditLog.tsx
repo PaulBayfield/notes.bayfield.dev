@@ -8,6 +8,8 @@ import type { StringKey, Translate } from "../../lib/i18n";
 import { saveTextFile } from "../../lib/platform";
 import { useSettings } from "../../lib/settings";
 import { Avatar } from "../Avatar";
+import { Dialog } from "../Dialogs";
+import { CopyField } from "./IntegrationPages";
 import { Download, FileText, Users } from "../icons";
 import { Empty, Loading, PageHeader, Row, Select, useLoad, usePage } from "./common";
 
@@ -132,6 +134,109 @@ function toCsv(t: Translate, events: WorkspaceEvent[]): string {
   return [head.join(","), ...rows.map((r) => r.join(","))].join("\n");
 }
 
+/** Everything about one entry: what, who, on what, what changed, from where, and the raw record. */
+function EventDialog({ e, onClose, onOpen }: { e: WorkspaceEvent; onClose: () => void; onOpen: (kind: "doc" | "collection", id: string) => void }) {
+  const { t, f } = useSettings();
+  const extra = dataLines(t, e);
+  const changes = Object.entries(e.changes ?? {});
+  const line = (label: string, value: ReactNode) =>
+    value === null || value === undefined || value === "" ? null : (
+      <div className="event-field">
+        <span className="event-field-label">{label}</span>
+        <span className="event-field-value">{value}</span>
+      </div>
+    );
+  const link = (text: string, deleted: boolean, go: () => void) =>
+    deleted ? (
+      <span className="muted">
+        {text} ({t("deletedLabel")})
+      </span>
+    ) : (
+      <button className="link-button" onClick={go}>
+        {text}
+      </button>
+    );
+  return (
+    <Dialog title={describe(t, e).replace(/^./, (c) => c.toUpperCase())} onClose={onClose} wide>
+      <div className="event-sheet">
+        <section>
+          <h4>{t("eventWhat")}</h4>
+          {line(
+            t("eventWho"),
+            e.actor ? (
+              <span className="event-person">
+                <Avatar user={e.actor} size={18} />
+                {e.actor.name}
+                {e.actor.email && <span className="muted">{e.actor.email}</span>}
+              </span>
+            ) : (
+              t("someone")
+            ),
+          )}
+          {line(t("eventWhen"), f.dateTime(e.createdAt))}
+          {line(t("eventAction"), <code>{e.name}</code>)}
+          {line(t("eventDocument"), e.document && link(e.document.title || t("untitled"), e.document.deleted, () => onOpen("doc", e.document!.id)))}
+          {line(t("collection"), e.collection && link(e.collection.name, e.collection.deleted, () => onOpen("collection", e.collection!.id)))}
+          {line(
+            t("eventAbout"),
+            e.user && (
+              <span className="event-person">
+                <Avatar user={e.user} size={18} />
+                {e.user.name}
+                {e.user.email && <span className="muted">{e.user.email}</span>}
+              </span>
+            ),
+          )}
+          {line(t("eventGroup"), e.group?.name)}
+          {extra.map((x) => line(t("eventDetail"), x))}
+        </section>
+
+        {changes.length > 0 && (
+          <section>
+            <h4>{t("eventChanges")}</h4>
+            <table className="event-changes">
+              <thead>
+                <tr>
+                  <th>{t("eventField")}</th>
+                  <th>{t("eventBefore")}</th>
+                  <th>{t("eventAfter")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {changes.map(([field, c]) => (
+                  <tr key={field}>
+                    <td>{fieldText(t, field)}</td>
+                    <td className="before">{valueText(t, field, c.from, c.fromLabel)}</td>
+                    <td className="after">{valueText(t, field, c.to, c.toLabel)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        <section>
+          <h4>{t("eventSource")}</h4>
+          {line(t("eventVia"), e.via ? t(VIA_LABELS[e.via] ?? "viaWeb") : null)}
+          {line(t("eventClient"), e.client)}
+          {line(t("eventIp"), e.actorIpAddress)}
+          {line(t("eventUserAgent"), e.userAgent && <code className="wrap">{e.userAgent}</code>)}
+          {!e.via && !e.client && !e.actorIpAddress && <p className="settings-hint">{t("eventNoSource")}</p>}
+        </section>
+
+        <details className="event-raw">
+          <summary>{t("eventRaw")}</summary>
+          <label className="settings-form">
+            <span>{t("eventId")}</span>
+            <CopyField value={e.id} />
+          </label>
+          <pre>{JSON.stringify({ name: e.name, actorId: e.actorId, userId: e.userId, documentId: e.documentId, collectionId: e.collectionId, modelId: e.modelId, data: e.data, changes: e.changes }, null, 2)}</pre>
+        </details>
+      </div>
+    </Dialog>
+  );
+}
+
 const RETENTION: [string, StringKey | null, number | null][] = [
   ["forever", "retentionForever", null],
   ["30", null, 30],
@@ -151,6 +256,7 @@ export function AuditLogPage() {
   const [pages, setPages] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [people, setPeople] = useState<Member[]>([]);
+  const [opened, setOpened] = useState<WorkspaceEvent | null>(null);
 
   useEffect(() => {
     listMembers("", "all", 0, 100)
@@ -206,7 +312,14 @@ export function AuditLogPage() {
 
   const chip = (icon: ReactNode, text: string, onClick?: () => void, faded?: boolean) =>
     onClick ? (
-      <button type="button" className={`event-chip${faded ? " faded" : ""}`} onClick={onClick}>
+      <button
+        type="button"
+        className={`event-chip${faded ? " faded" : ""}`}
+        onClick={(ev) => {
+          ev.stopPropagation();
+          onClick();
+        }}
+      >
         {icon}
         {text}
       </button>
@@ -270,7 +383,15 @@ export function AuditLogPage() {
               const meta = [f.relative(e.createdAt), e.via ? t(VIA_LABELS[e.via] ?? "viaWeb") : null, e.client, e.actorIpAddress].filter(Boolean).join(" · ");
               const leftover = !e.document && !e.collection && !e.user && !e.group ? subjectText(e) : "";
               return (
-                <div key={e.id} className="settings-item audit-item">
+                <div
+                  key={e.id}
+                  className="settings-item audit-item clickable"
+                  role="button"
+                  tabIndex={0}
+                  title={t("eventOpenDetails")}
+                  onClick={() => setOpened(e)}
+                  onKeyDown={(ev) => (ev.key === "Enter" || ev.key === " ") && (ev.preventDefault(), setOpened(e))}
+                >
                   <Avatar user={e.actor ?? { name: "?", color: "var(--text-muted)", avatarUrl: null }} size={28} />
                   <div className="settings-item-text">
                     <span className="audit-line">
@@ -311,6 +432,17 @@ export function AuditLogPage() {
           </div>
         )}
       </section>
+
+      {opened && (
+        <EventDialog
+          e={opened}
+          onClose={() => setOpened(null)}
+          onOpen={(kind, id) => {
+            setOpened(null);
+            onNavigate({ name: kind, id });
+          }}
+        />
+      )}
 
       <section className="settings-rows">
         <Row label={t("auditRetention")} hint={t("auditRetentionHint")}>
