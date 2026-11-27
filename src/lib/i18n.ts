@@ -310,8 +310,8 @@ const en = {
   deleteExport: "Delete export",
   deleteExportMessage: "Delete the export of “{name}”? The file can't be downloaded afterwards.",
   about: "About",
-  aboutDesktop: "Desktop app for Outline.",
-  aboutWeb: "Web app for Outline.",
+  aboutDesktop: "Desktop app for Notes and Outline workspaces.",
+  aboutWeb: "Web app for Notes and Outline workspaces.",
   versionLabel: "Version {version}",
   updates: "Updates",
   checkingUpdates: "Checking for updates…",
@@ -860,6 +860,13 @@ const en = {
   emojiNameHint: "You'll type :{name}: in a document to use it.",
   emojiUsage: "Type : and the name in a document, or pick them under “This workspace” in /emoji.",
   emojiAddedHowTo: "Added: type :{name}: in a document",
+  avatarColor: "Colour",
+  avatarColorHint: "Behind your initial, while you have no photo.",
+  notesServerVersionLabel: "Notes server version",
+  notesServerLatestLabel: "Latest Notes release",
+  updateAvailableShort: "Update available",
+  projectLabel: "Project",
+  projectHint: "Source code, releases and issues.",
 };
 
 export type StringKey = keyof typeof en;
@@ -1171,8 +1178,8 @@ const fr: Record<StringKey, string> = {
   deleteExport: "Supprimer l'export",
   deleteExportMessage: "Supprimer l'export de « {name} » ? Le fichier ne pourra plus être téléchargé.",
   about: "À propos",
-  aboutDesktop: "Application de bureau pour Outline.",
-  aboutWeb: "Application web pour Outline.",
+  aboutDesktop: "Application de bureau pour les espaces Notes et Outline.",
+  aboutWeb: "Application web pour les espaces Notes et Outline.",
   versionLabel: "Version {version}",
   updates: "Mises à jour",
   checkingUpdates: "Recherche de mises à jour…",
@@ -1720,6 +1727,13 @@ const fr: Record<StringKey, string> = {
   emojiNameHint: "Tu taperas :{name}: dans un document pour l'utiliser.",
   emojiUsage: "Tape : puis le nom dans un document, ou choisis-les dans « Cet espace » via /emoji.",
   emojiAddedHowTo: "Ajouté : tape :{name}: dans un document",
+  avatarColor: "Couleur",
+  avatarColorHint: "Derrière ton initiale, tant que tu n'as pas de photo.",
+  notesServerVersionLabel: "Version du serveur Notes",
+  notesServerLatestLabel: "Dernière version de Notes",
+  updateAvailableShort: "Mise à jour disponible",
+  projectLabel: "Projet",
+  projectHint: "Code source, versions et signalements.",
 };
 
 const strings: Record<Lang, Record<StringKey, string>> = { en, fr };

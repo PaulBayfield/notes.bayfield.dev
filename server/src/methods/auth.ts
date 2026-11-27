@@ -1,7 +1,7 @@
 // auth.*, installation.info, users.info, teams.create: who's signed in, how to sign in, the person's
 // other workspaces, and making a new one.
 
-import { APP_VERSION, DEV_LOGIN_USER, WORKSPACE_CREATION, WORKSPACE_DOMAIN, oidc } from "../config.ts";
+import { APP_VERSION, DEV_LOGIN_USER, UPDATE_CHECK, WORKSPACE_CREATION, WORKSPACE_DOMAIN, oidc } from "../config.ts";
 import { sql } from "../db.ts";
 import { collaborationToken, signOutEverywhere, transferToken } from "../auth.ts";
 import { forbidden, invalid, notFound } from "../http.ts";
@@ -47,7 +47,45 @@ method("auth.delete", async ({ c, user }) => {
   return { success: true };
 });
 
-method("installation.info", () => ({ data: { version: APP_VERSION, latestVersion: APP_VERSION, versionsBehind: 0 } }));
+const REPOSITORY = "PaulBayfield/notes.bayfield.dev";
+
+/** The newest release on GitHub, looked up at most every 6 hours (UPDATE_CHECK=false: never). */
+let latest: { version: string | null; at: number } = { version: null, at: 0 };
+async function latestRelease(): Promise<string | null> {
+  if (!UPDATE_CHECK) return null;
+  if (Date.now() - latest.at < 6 * 60 * 60_000) return latest.version;
+  latest = { version: latest.version, at: Date.now() };
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(5000) });
+    if (res.ok) latest.version = String(((await res.json()) as { tag_name?: string }).tag_name ?? "").replace(/^v/, "") || null;
+  } catch {
+    // Offline: unknown until the next try.
+  }
+  return latest.version;
+}
+
+const parts = (v: string) => v.split(/[.-]/).slice(0, 3).map((n) => Number.parseInt(n, 10) || 0);
+const newer = (a: string, b: string) => {
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+};
+
+/** The server's version (Outline's shape), and what it is: Notes, with its project page. */
+method("installation.info", async () => {
+  const latestVersion = await latestRelease();
+  return {
+    data: {
+      version: APP_VERSION,
+      latestVersion: latestVersion ?? undefined,
+      // Major/minor/patch steps don't count releases; "behind" is enough to say so.
+      versionsBehind: latestVersion ? (newer(latestVersion, APP_VERSION) ? 1 : 0) : -1,
+      server: "notes",
+      repository: `https://github.com/${REPOSITORY}`,
+      releasesUrl: `https://github.com/${REPOSITORY}/releases`,
+    },
+  };
+});
 
 /** A person by id (anyone in the workspace), or the caller. */
 method("users.info", async ({ params, user }) => {

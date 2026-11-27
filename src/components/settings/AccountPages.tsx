@@ -13,6 +13,9 @@ import { PageHeader, Row, Select, Switch, usePage } from "./common";
 import { connectPrefs, disconnectPrefs, usePrefsStatus, activeCustomTheme, BASE_COLORS, PREFS_URL } from "../../lib/prefs";
 import { External } from "../icons";
 
+/** The colours behind an initial (the server's palette for new accounts). */
+const AVATAR_COLORS = ["#FF5C80", "#FF5C00", "#FFBA00", "#20C997", "#10B981", "#0EA5E9", "#3B82F6", "#6366F1", "#8B5CF6", "#A855F7", "#EC4899", "#F43F5E"];
+
 export function ProfilePage() {
   const { t } = useSettings();
   const { me, team, setMe, flash, onError, server, onSignOut } = usePage();
@@ -24,7 +27,7 @@ export function ProfilePage() {
     setBusy(true);
     try {
       const user = await updateMe(patch);
-      setMe({ name: user.name, avatarUrl: user.avatarUrl });
+      setMe({ name: user.name, avatarUrl: user.avatarUrl, color: user.color });
       flash(message);
     } catch (e) {
       onError(e);
@@ -56,6 +59,25 @@ export function ProfilePage() {
             </button>
           )}
         </Row>
+        {!me.avatarUrl && (
+          <Row label={t("avatarColor")} hint={t("avatarColorHint")}>
+            <div className="color-row" role="radiogroup" aria-label={t("avatarColor")}>
+              {AVATAR_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={me.color?.toLowerCase() === c.toLowerCase()}
+                  className={`color-swatch${me.color?.toLowerCase() === c.toLowerCase() ? " active" : ""}`}
+                  style={{ background: c }}
+                  title={c}
+                  disabled={busy}
+                  onClick={() => void save({ color: c }, t("profileSaved"))}
+                />
+              ))}
+            </div>
+          </Row>
+        )}
         <Row label={t("nameLabel")} hint={t("nameHint")}>
           <form
             className="inline-form"
@@ -397,6 +419,7 @@ export function NotificationsPage() {
 }
 
 const OUTLINE_RELEASES_URL = "https://github.com/outline/outline/releases";
+const PROJECT_URL = "https://github.com/PaulBayfield/notes.bayfield.dev";
 
 /** The app's version, and a way to look for a newer one. */
 export function AboutPage() {
@@ -418,14 +441,16 @@ export function AboutPage() {
           ? t("updateCheckFailed")
           : (installStatus(t, installer.state) ?? t("updateAvailable", { version: release?.version ?? "" }));
 
-  // The Outline version the server runs (self-hosted servers only).
+  // The version the server runs: Notes' own server, or an official Outline one (self-hosted).
   const [outline, setOutline] = useState<InstallationInfo | null>(null);
   useEffect(() => {
     void installationInfo().then(setOutline);
   }, []);
   const host = server.replace(/^https?:\/\//, "");
   const behind = outline?.versionsBehind ?? -1;
-  const behindLabel = behind < 0 ? t("outlineUnknown") : behind === 0 ? t("outlineUpToDate") : t(behind === 1 ? "outlineBehindOne" : "outlineBehind", { n: behind });
+  const notesServer = outline?.server === "notes";
+  const behindLabel =
+    behind < 0 ? t("outlineUnknown") : behind === 0 ? t("outlineUpToDate") : notesServer ? t("updateAvailableShort") : t(behind === 1 ? "outlineBehindOne" : "outlineBehind", { n: behind });
 
   return (
     <>
@@ -474,12 +499,12 @@ export function AboutPage() {
         </Row>
         {outline && (
           <>
-            <Row label={t("outlineVersionLabel")}>
+            <Row label={t(notesServer ? "notesServerVersionLabel" : "outlineVersionLabel")}>
               <span className="version-tag">{outline.version}</span>
             </Row>
-            <Row label={t("outlineLatestLabel")}>
+            <Row label={t(notesServer ? "notesServerLatestLabel" : "outlineLatestLabel")}>
               {outline.latestVersion ? (
-                <button className="text-button" title={t("releaseNotes")} onClick={() => void openExternal(OUTLINE_RELEASES_URL)}>
+                <button className="text-button" title={t("releaseNotes")} onClick={() => void openExternal(outline.releasesUrl ?? OUTLINE_RELEASES_URL)}>
                   {outline.latestVersion}
                 </button>
               ) : (
@@ -494,6 +519,11 @@ export function AboutPage() {
         <Row label={t("releaseNotes")}>
           <button className="text-button" onClick={() => void openExternal(RELEASES_URL)}>
             {t("openInBrowser")}
+          </button>
+        </Row>
+        <Row label={t("projectLabel")} hint={t("projectHint")}>
+          <button className="text-button" onClick={() => void openExternal(PROJECT_URL)}>
+            github.com/PaulBayfield/notes.bayfield.dev
           </button>
         </Row>
       </section>

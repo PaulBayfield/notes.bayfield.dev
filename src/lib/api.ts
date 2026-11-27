@@ -900,7 +900,7 @@ export const listShares = (query = "") =>
 
 // ---------- Account ----------
 
-export const updateMe = (patch: { name?: string; avatarUrl?: string | null; language?: string; preferences?: Record<string, unknown> }) =>
+export const updateMe = (patch: { name?: string; avatarUrl?: string | null; color?: string; language?: string; preferences?: Record<string, unknown> }) =>
   call<User>("users.update", patch).then((r) => r.data);
 
 /** Turns one kind of notification email on or off. */
@@ -912,6 +912,10 @@ export interface InstallationInfo {
   latestVersion?: string;
   /** -1 when unknown. */
   versionsBehind: number;
+  /** "notes" when the server is Notes' own (official Outline servers don't say). */
+  server?: string;
+  repository?: string;
+  releasesUrl?: string;
 }
 
 /** The Outline version the server runs. Null where it isn't available (Outline's cloud, older servers). */

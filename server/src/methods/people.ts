@@ -29,9 +29,13 @@ method("users.update", async (call) => {
   const name = p.string("name", { max: 255 });
   if (name !== undefined && !name.trim()) throw invalid("name can't be empty");
   const preferences = p.object("preferences");
+  // The colour behind their initial, when there's no picture.
+  const color = p.string("color", { max: 7 });
+  if (color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(color)) throw invalid("color must be a hex colour like #3B82F6");
   const [updated] = await sql<UserRow[]>`
     UPDATE users SET
       name = ${name?.trim() ?? u.name},
+      color = ${color ?? u.color},
       avatar_url = ${p.has("avatarUrl") ? (p.nullableString("avatarUrl", 2000) ?? null) : u.avatarUrl},
       language = ${p.string("language", { max: 20 }) ?? u.language},
       timezone = ${p.has("timezone") ? (p.nullableString("timezone", 100) ?? null) : u.timezone},
