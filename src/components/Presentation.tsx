@@ -46,8 +46,21 @@ export function Presentation({ title, icon, color, doc, onClose }: { title: stri
   // Full screen while presenting.
   useEffect(() => {
     if (isTauri) {
-      void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setFullscreen(true));
-      return () => void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setFullscreen(false));
+      // On Windows, a frameless window that's maximized keeps its maximized size in full screen, which
+      // leaves the taskbar's strip black: leave the maximized state first, and come back to it after.
+      let wasMaximized = false;
+      const ready = import("@tauri-apps/api/window").then(async ({ getCurrentWindow }) => {
+        const win = getCurrentWindow();
+        wasMaximized = await win.isMaximized().catch(() => false);
+        if (wasMaximized) await win.unmaximize().catch(() => {});
+        await win.setFullscreen(true);
+        return win;
+      });
+      return () =>
+        void ready.then(async (win) => {
+          await win.setFullscreen(false);
+          if (wasMaximized) await win.maximize().catch(() => {});
+        });
     }
     void document.documentElement.requestFullscreen?.().catch(() => {});
     return () => {
