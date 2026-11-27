@@ -95,6 +95,12 @@ export class Access {
       // A draft: its author's, and whoever it was shared with.
       return own ? this.cap("admin") : membership;
     }
+    if (d.isTemplate && !d.collectionId) {
+      // A workspace template (in no collection): everyone uses it, its author and admins change it.
+      if (d.deletedAt) return own || this.isAdmin ? this.cap("admin") : null;
+      if (own || this.isAdmin) return this.cap("admin");
+      return this.user.role === "guest" ? null : this.cap("read");
+    }
     const p = best(this.collection(d.collectionId), membership);
     if (d.deletedAt) return own || this.isAdmin || atLeast(p, "read_write") ? this.cap(p ?? "read_write") : null;
     return p;
