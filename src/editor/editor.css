@@ -641,6 +641,15 @@ button.doc-icon:hover {
   margin: 0.8em 0;
 }
 
+/* Formulas, mentions and emoji inside a text selection: tinted like the selected text around them. */
+.doc-content .in-selection {
+  background: color-mix(in srgb, var(--primary) 26%, transparent);
+  border-radius: 3px;
+}
+.doc-content .in-selection * {
+  background-color: transparent;
+}
+
 /* Placeholder in the empty line under the cursor */
 .doc-content .is-empty::before {
   content: attr(data-placeholder);
